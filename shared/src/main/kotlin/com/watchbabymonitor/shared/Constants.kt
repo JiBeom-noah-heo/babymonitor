@@ -34,4 +34,24 @@ object Constants {
 
     /** 폰 → 워치 요청 응답 대기 시간. */
     const val CONTROL_REQUEST_TIMEOUT_MS = 5_000L
+
+    /** 오디오 포맷 (CLAUDE.md §4-1): 16kHz / mono / PCM 16bit. */
+    object Audio {
+        const val SAMPLE_RATE_HZ = 16_000
+
+        /** 레벨 계산 단위 (CLAUDE.md §4-2). */
+        const val LEVEL_WINDOW_MS = 100
+
+        /** 한 레벨 윈도우의 샘플 수 (16kHz × 100ms = 1600). */
+        const val SAMPLES_PER_WINDOW = SAMPLE_RATE_HZ * LEVEL_WINDOW_MS / 1000
+
+        /** PCM16 풀스케일. dBFS 기준값. */
+        const val FULL_SCALE = 32768.0
+
+        /** 무음(RMS 0)일 때 쓰는 하한. log10(0) = -∞ 방지. */
+        const val MIN_DBFS = -96f
+
+        /** 레벨 바 표시 범위의 하한. 이보다 작으면 바가 비어 있음. */
+        const val DISPLAY_FLOOR_DBFS = -80f
+    }
 }

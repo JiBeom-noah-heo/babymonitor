@@ -126,10 +126,10 @@ WatchBabyMonitor/
 - **완료 조건**: 버튼 누르면 왕복 메시지가 양쪽 화면에 뜸
 
 ### Phase 2 — 워치 마이크 & 레벨 미터
-- [ ] `RECORD_AUDIO` 권한 요청 (워치 UI)
-- [ ] `AudioCapture`: AudioRecord 16kHz mono PCM16, 코루틴 Flow로 버퍼 방출
-- [ ] `LevelMeter`: RMS → dBFS, 100ms 단위 StateFlow
-- [ ] 워치 화면에 실시간 레벨 바 표시
+- [x] `RECORD_AUDIO` 권한 요청 (워치 UI)
+- [x] `AudioCapture`: AudioRecord 16kHz mono PCM16, 코루틴 Flow로 버퍼 방출
+- [x] `LevelMeter`: RMS → dBFS, 100ms 단위 StateFlow
+- [x] 워치 화면에 실시간 레벨 바 표시
 - **완료 조건**: 워치 화면에서 소리 크기에 따라 바가 움직임
 
 ### Phase 3 — 소음 알림
