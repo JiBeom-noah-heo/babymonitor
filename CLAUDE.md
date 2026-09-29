@@ -1,6 +1,6 @@
 # WatchBabyMonitor — 프로젝트 가이드
 
-갤럭시 워치6를 아이 옆에 두고, 폰에서 소리를 듣거나 울음/소음 알림을 받는 **오디오 베이비 모니터** 앱.
+갤럭시 워치7을 아이 옆에 두고, 폰에서 소리를 듣거나 울음/소음 알림을 받는 **오디오 베이비 모니터** 앱.
 워치(Wear OS)와 폰(Android) 두 개의 앱 모듈로 구성된다.
 
 > Claude Code 작업 규칙: 이 문서를 먼저 읽고, Phase 순서대로 진행한다. 각 Phase 완료 시 `docs/devlog/` 에 기록을 남긴다.
@@ -22,7 +22,7 @@
 - 자장가 재생
 
 ### 명시적 제외
-- 영상 (워치6에 카메라 없음)
+- 영상 (워치7에 카메라 없음)
 - iOS 지원
 - 클라우드/서버 (전부 로컬 통신)
 
@@ -32,7 +32,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 워치 | Galaxy Watch6 (Wear OS 4 / One UI Watch 5), minSdk 30 (Wear OS 3+), targetSdk 33 |
+| 워치 | Galaxy Watch7 (SM-L300, Wear OS 5 / One UI Watch 6), minSdk 30 (Wear OS 3+), targetSdk 33 |
 | 폰 | Android 10+ (minSdk 29), targetSdk 34 |
 | 언어 | Kotlin 2.x |
 | UI | Jetpack Compose (폰), Compose for Wear OS (워치) |
@@ -120,9 +120,9 @@ WatchBabyMonitor/
 - **완료 조건**: 양쪽 앱이 실제 기기에서 설치·실행됨
 
 ### Phase 1 — 연결 확인
-- [ ] `shared`에 경로 상수 정의
-- [ ] 폰 → 워치 `/control` 메시지 "PING", 워치가 "PONG" 회신
-- [ ] `NodeClient`로 연결된 노드 목록 표시
+- [x] `shared`에 경로 상수 정의
+- [x] 폰 → 워치 `/control` 메시지 "PING", 워치가 "PONG" 회신
+- [x] `NodeClient`로 연결된 노드 목록 표시
 - **완료 조건**: 버튼 누르면 왕복 메시지가 양쪽 화면에 뜸
 
 ### Phase 2 — 워치 마이크 & 레벨 미터
