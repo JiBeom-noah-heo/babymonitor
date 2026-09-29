@@ -133,10 +133,10 @@ WatchBabyMonitor/
 - **완료 조건**: 워치 화면에서 소리 크기에 따라 바가 움직임
 
 ### Phase 3 — 소음 알림
-- [ ] 워치 `MonitorService` (foreground, type=microphone) 생성, 시작/정지
-- [ ] 임계값 판정 + debounce/cooldown 로직 (`shared`에 순수 Kotlin으로, 단위 테스트 필수)
-- [ ] `/alert` MessageClient 전송
-- [ ] 폰 `WearableListenerService`로 수신 → 알림 채널 "소음 감지" 로 heads-up 알림
+- [x] 워치 `MonitorService` (foreground, type=microphone) 생성, 시작/정지
+- [x] 임계값 판정 + debounce/cooldown 로직 (`shared`에 순수 Kotlin으로, 단위 테스트 필수)
+- [x] `/alert` MessageClient 전송
+- [x] 폰 `WearableListenerService`로 수신 → 알림 채널 "소음 감지" 로 heads-up 알림
 - [ ] 워치 화면 끈 채로 10분 동작 확인
 - **완료 조건**: 워치 옆에서 박수 치면 다른 방의 폰이 울림
 

@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.Wearable
+import com.watchbabymonitor.mobile.service.AlertEvents
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
 import kotlinx.coroutines.CancellationException
@@ -21,6 +22,7 @@ import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val TAG = Constants.logTag("HomeViewModel")
 
@@ -44,6 +46,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         refreshNodes()
+        viewModelScope.launch {
+            AlertEvents.alerts.collect { alert ->
+                appendLog("소음 알림 ${alert.level.roundToInt()} dB")
+            }
+        }
     }
 
     fun refreshNodes() {

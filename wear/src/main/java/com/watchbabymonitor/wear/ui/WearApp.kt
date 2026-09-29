@@ -2,6 +2,7 @@ package com.watchbabymonitor.wear.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,12 +11,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,56 +33,54 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.wear.compose.material.Chip
+import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.shared.AudioLevel
 import com.watchbabymonitor.shared.Constants
-import com.watchbabymonitor.wear.audio.LevelMeter
+import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.wear.service.ControlEvents
+import com.watchbabymonitor.wear.service.MonitorService
+import com.watchbabymonitor.wear.service.MonitorState
+import com.watchbabymonitor.wear.service.MonitorStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private val TAG = Constants.logTag("WearApp")
 
-private sealed interface MicState {
-    data object NeedPermission : MicState
-    data object Denied : MicState
-    data object Running : MicState
-    data class Error(val message: String) : MicState
-}
-
 @Composable
 fun WearApp() {
     val context = LocalContext.current
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val ping by ControlEvents.ping.collectAsState()
+    val monitor by MonitorStatus.state.collectAsState()
     var connected by remember { mutableStateOf("확인 중…") }
-
-    val meter = remember { LevelMeter() }
-    val dbfs by meter.dbfs.collectAsState()
 
     fun hasMicPermission() = ContextCompat.checkSelfPermission(
         context, Manifest.permission.RECORD_AUDIO,
     ) == PackageManager.PERMISSION_GRANTED
 
-    var micState by remember {
-        mutableStateOf(if (hasMicPermission()) MicState.Running else MicState.NeedPermission)
-    }
+    var micDenied by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        Log.i(TAG, "RECORD_AUDIO granted=$granted")
-        micState = if (granted) MicState.Running else MicState.Denied
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        Log.i(TAG, "permissions: $result")
+        if (result[Manifest.permission.RECORD_AUDIO] == true) {
+            micDenied = false
+            MonitorService.start(context)
+        } else {
+            micDenied = true
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -93,35 +95,34 @@ fun WearApp() {
         }
     }
 
-    // 화면이 보이는 동안만 측정 (Phase 3 에서 MonitorService 로 이동)
-    LaunchedEffect(micState) {
-        if (micState != MicState.Running) return@LaunchedEffect
-        try {
-            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                if (hasMicPermission()) meter.run()
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "level meter failed", e)
-            micState = MicState.Error(e.message ?: e.javaClass.simpleName)
-        }
-    }
-
     WearScreen(
         header = if (ping.count == 0) connected else "$connected · PING ${ping.count}",
-        micState = micState,
-        dbfs = dbfs,
-        onRequestPermission = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+        monitor = monitor,
+        micDenied = micDenied,
+        onToggle = {
+            when {
+                monitor.running -> MonitorService.stop(context)
+                hasMicPermission() -> MonitorService.start(context)
+                else -> permissionLauncher.launch(requiredPermissions())
+            }
+        },
     )
 }
+
+private fun requiredPermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // 포그라운드 서비스 알림 표시용 (없어도 모니터링은 동작)
+        arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+        arrayOf(Manifest.permission.RECORD_AUDIO)
+    }
 
 @Composable
 private fun WearScreen(
     header: String,
-    micState: MicState,
-    dbfs: Float,
-    onRequestPermission: () -> Unit,
+    monitor: MonitorState,
+    micDenied: Boolean,
+    onToggle: () -> Unit,
 ) {
     MaterialTheme {
         Box(
@@ -133,52 +134,52 @@ private fun WearScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 28.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
                     text = header,
-                    style = MaterialTheme.typography.caption2,
+                    style = MaterialTheme.typography.caption3,
                     color = MaterialTheme.colors.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                when (micState) {
-                    MicState.Running -> LevelDisplay(dbfs)
-                    MicState.NeedPermission, MicState.Denied -> PermissionPrompt(
-                        denied = micState == MicState.Denied,
-                        onRequestPermission = onRequestPermission,
-                    )
-                    is MicState.Error -> Text(
-                        text = "마이크 오류\n${micState.message}",
-                        modifier = Modifier.padding(top = 8.dp),
-                        color = MaterialTheme.colors.error,
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.caption1,
-                    )
-                }
+                Text(
+                    text = if (monitor.running && monitor.dbfs > Constants.Audio.MIN_DBFS) {
+                        "${monitor.dbfs.roundToInt()} dB"
+                    } else {
+                        "—"
+                    },
+                    modifier = Modifier.padding(top = 4.dp),
+                    style = MaterialTheme.typography.title1,
+                    color = if (monitor.running) MaterialTheme.colors.primary else MaterialTheme.colors.onSurfaceVariant,
+                )
+                LevelBar(dbfs = if (monitor.running) monitor.dbfs else Constants.Audio.MIN_DBFS, thresholdDbfs = monitor.thresholdDbfs)
+                StatusLine(monitor = monitor, micDenied = micDenied)
+                CompactChip(
+                    onClick = onToggle,
+                    modifier = Modifier.padding(top = 6.dp),
+                    label = { Text(if (monitor.running) "정지" else "모니터링 시작") },
+                    colors = if (monitor.running) ChipDefaults.secondaryChipColors() else ChipDefaults.primaryChipColors(),
+                )
             }
         }
     }
 }
 
+/** 레벨 바 + 임계값 위치 표시. */
 @Composable
-private fun LevelDisplay(dbfs: Float) {
+private fun LevelBar(dbfs: Float, thresholdDbfs: Float) {
     val fraction by animateFloatAsState(
         targetValue = AudioLevel.normalize(dbfs),
         animationSpec = tween(durationMillis = Constants.Audio.LEVEL_WINDOW_MS),
         label = "level",
     )
-    Text(
-        text = if (dbfs <= Constants.Audio.MIN_DBFS) "—" else "${dbfs.roundToInt()} dB",
-        modifier = Modifier.padding(top = 6.dp),
-        style = MaterialTheme.typography.display3,
-        color = MaterialTheme.colors.primary,
-    )
-    Box(
+    val over = dbfs >= thresholdDbfs
+    BoxWithConstraints(
         modifier = Modifier
-            .padding(vertical = 8.dp)
+            .padding(vertical = 6.dp)
             .fillMaxWidth()
             .height(12.dp)
             .clip(RoundedCornerShape(6.dp))
@@ -188,33 +189,53 @@ private fun LevelDisplay(dbfs: Float) {
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(fraction)
-                .background(MaterialTheme.colors.primary),
+                .background(if (over) MaterialTheme.colors.error else MaterialTheme.colors.primary),
+        )
+        Box(
+            modifier = Modifier
+                .offset(x = maxWidth * AudioLevel.normalize(thresholdDbfs))
+                .width(2.dp)
+                .fillMaxHeight()
+                .background(MaterialTheme.colors.onSurface),
         )
     }
-    Text(
-        text = "dBFS",
-        style = MaterialTheme.typography.caption3,
-        color = MaterialTheme.colors.onSurfaceVariant,
-    )
 }
 
 @Composable
-private fun PermissionPrompt(denied: Boolean, onRequestPermission: () -> Unit) {
+private fun StatusLine(monitor: MonitorState, micDenied: Boolean) {
+    val (text, isError) = when {
+        micDenied -> "마이크 권한이 필요해요" to true
+        monitor.error != null -> monitor.error to true
+        monitor.lastAlert != null -> alertSummary(monitor.alertCount, monitor.lastAlert, monitor.lastAlertDelivered) to false
+        monitor.running -> "기준 ${monitor.thresholdDbfs.roundToInt()} dB" to false
+        else -> "정지됨" to false
+    }
     Text(
-        text = if (denied) "마이크 권한이 거부됐어요.\n다시 누르거나 설정에서 허용해 주세요."
-        else "소리를 측정하려면\n마이크 권한이 필요해요.",
-        modifier = Modifier.padding(vertical = 8.dp),
-        style = MaterialTheme.typography.caption1,
+        text = text,
+        style = MaterialTheme.typography.caption3,
+        color = if (isError) MaterialTheme.colors.error else MaterialTheme.colors.onSurfaceVariant,
         textAlign = TextAlign.Center,
+        maxLines = 2,
     )
-    Chip(
-        onClick = onRequestPermission,
-        label = { Text("마이크 허용") },
-    )
+}
+
+private fun alertSummary(count: Int, alert: NoiseAlert, delivered: Int?): String {
+    val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(alert.ts))
+    val sent = when (delivered) {
+        null -> "전송 중"
+        0 -> "전송 실패"
+        else -> "전송됨"
+    }
+    return "알림 ${count}회 · $time $sent"
 }
 
 @Preview(device = "id:wearos_small_round", showSystemUi = true)
 @Composable
 private fun WearScreenPreview() {
-    WearScreen(header = "Galaxy S25 · PING 3", micState = MicState.Running, dbfs = -35f, onRequestPermission = {})
+    WearScreen(
+        header = "Galaxy S25 · PING 3",
+        monitor = MonitorState(running = true, dbfs = -28f, alertCount = 2, lastAlert = NoiseAlert(-18f, 0L), lastAlertDelivered = 1),
+        micDenied = false,
+        onToggle = {},
+    )
 }

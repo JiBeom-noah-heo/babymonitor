@@ -54,4 +54,19 @@ object Constants {
         /** 레벨 바 표시 범위의 하한. 이보다 작으면 바가 비어 있음. */
         const val DISPLAY_FLOOR_DBFS = -80f
     }
+
+    /** 소음 알림 판정 (CLAUDE.md §4-3, ADR 003). */
+    object Alert {
+        /** 기본 임계값. 조용한 방 약 -55 dBFS 기준 (Phase 2 실측). */
+        const val DEFAULT_THRESHOLD_DBFS = -35f
+
+        /** 임계값 이상이어야 하는 누적 시간. "1초 이상 지속". */
+        const val SUSTAIN_MS = 1_000
+
+        /** [SUSTAIN_MS] 를 세는 구간. 차이(0.5초)만큼 울음 사이 숨 쉬는 틈을 허용. */
+        const val SUSTAIN_WINDOW_MS = 1_500
+
+        /** 알림 후 다음 알림까지 최소 간격. */
+        const val COOLDOWN_MS = 30_000L
+    }
 }
