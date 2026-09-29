@@ -137,7 +137,7 @@ WatchBabyMonitor/
 - [x] 임계값 판정 + debounce/cooldown 로직 (`shared`에 순수 Kotlin으로, 단위 테스트 필수)
 - [x] `/alert` MessageClient 전송
 - [x] 폰 `WearableListenerService`로 수신 → 알림 채널 "소음 감지" 로 heads-up 알림
-- [ ] 워치 화면 끈 채로 10분 동작 확인
+- [x] 워치 화면 끈 채로 10분 동작 확인
 - **완료 조건**: 워치 옆에서 박수 치면 다른 방의 폰이 울림
 
 ### Phase 4 — 라이브 오디오 스트리밍
