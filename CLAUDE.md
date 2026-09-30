@@ -79,8 +79,8 @@
 |---|---|---|---|
 | `/audio` | ChannelClient | 감지기 → 수신기 | 원시 PCM16 LE 스트림 (헤더 없음, 고정 포맷). 감지기가 채널을 연다 |
 | `/alert` | MessageClient | 감지기 → 수신기 | `{level: Float, ts: Long, kind: "NOISE"}` JSON |
-| `/status` | DataClient | 양방향 | 역할(SENSOR/RECEIVER), 모니터링 on/off, 배터리 %, 마지막 dB |
-| `/control` | MessageClient (`sendRequest`, ADR 002) | 수신기 → 감지기 | `START`, `STOP`, `STREAM_ON`, `STREAM_OFF`, `SET_THRESHOLD:<dB>`, `PING`(진단). 응답 `OK` / `PONG` / `ERR:<사유>` |
+| `/status` | DataClient | 양방향 | 역할(SENSOR/RECEIVER), 모니터링 on/off, 스트리밍, 배터리 %, 마이크 막힘, 감지 설정(감지기), 오류 |
+| `/control` | MessageClient (`sendRequest`, ADR 002) | 수신기 → 감지기 | `START`, `STOP`, `STREAM_ON`, `STREAM_OFF`, `SET_THRESHOLD:<dB>`, `SET_COOLDOWN:<ms>`, `SET_PRESET:<HOME\|CAR>`(ADR 007), `PING`(진단). 응답 `OK` / `PONG` / `ERR:<사유>` |
 
 - 경로 이름은 방향과 무관하게 동일. 어느 기기가 보내는지는 `/status`의 역할 값으로 판단한다.
 - 양쪽 역할이 같으면(둘 다 SENSOR 등) 수신기 UI에 경고를 띄운다.
@@ -102,7 +102,8 @@ WatchBabyMonitor/
 │       ├── audio/         # AudioCapture(마이크), Streamer(채널 송신), AudioPlayer(AudioTrack)
 │       ├── datalayer/     # ControlClient, DataLayerAlertSink, StatusSync(/status)
 │       ├── service/       # MonitorService(감지기 FGS), ListenerService(수신기 FGS), DataLayerListenerService, StartPrompt
-│       ├── notification/  # NoiseNotifications(폰 heads-up), WatchAlert(워치 진동+화면 켜기)
+│       ├── notification/  # NoiseNotifications(폰 heads-up), WatchAlert(워치 진동+화면 켜기), PeerNotifications
+│       ├── history/       # Room 소음 이벤트 기록 (ADR 007)
 │       └── Engines, RoleStore, RoleControl, StatusHub   # 엔진 보관, 역할·프리셋 저장, /status 동기화
 ├── shared/          # 순수 Kotlin: 상수, 데이터 모델, 경로, 엔진 (Android 의존성 없음)
 │   ├── Role.kt            # SENSOR / RECEIVER
@@ -190,9 +191,9 @@ WatchBabyMonitor/
 - **완료 조건**: 알림 모드 1시간 동작 시 워치 배터리 소모 15% 이하 (목표치, 측정 후 조정)
 
 ### Phase 6 — 마무리
-- [ ] 설정 화면 (임계값 슬라이더, 쿨다운, 자동 스트리밍 여부)
-- [ ] 소음 이벤트 히스토리 (Room)
-- [ ] 앱 아이콘, 워치 타일(선택)
+- [x] 설정 화면 (임계값 슬라이더, 쿨다운, 자동 스트리밍 여부) — 수신기에서 감지기 설정 원격 변경, 원격 듣기 opt-in (ADR 007)
+- [x] 소음 이벤트 히스토리 (Room) — 오디오 클립 없이, 30일 보관
+- [x] 앱 아이콘 (적응형 + 테마 아이콘) — 워치 타일(선택)은 하지 않음
 
 ---
 
