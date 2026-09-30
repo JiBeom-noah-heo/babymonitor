@@ -4,6 +4,7 @@ import com.watchbabymonitor.shared.AudioLevel
 import com.watchbabymonitor.shared.Clock
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
+import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DetectionPreset
 import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.shared.NoiseDetector
@@ -25,8 +26,8 @@ import kotlin.math.max
 data class SensorState(
     val running: Boolean = false,
     val dbfs: Float = Constants.Audio.MIN_DBFS,
-    val thresholdDbfs: Float = Constants.Alert.DEFAULT_THRESHOLD_DBFS,
-    val preset: DetectionPreset = DetectionPreset.DEFAULT,
+    /** 현재 감지 설정 (프리셋 + 사용자 조정, Phase 6). */
+    val config: DetectionConfig = DetectionConfig(),
     val alertCount: Int = 0,
     val lastAlert: NoiseAlert? = null,
     /** 마지막 알림을 보낸 수신기 수. null = 전송 중, 0 = 실패. */
@@ -36,7 +37,10 @@ data class SensorState(
     val streaming: Boolean = false,
     /** 마이크 입력이 완전히 0 — 통화 등으로 다른 앱이 마이크를 가져감 (Phase 5). */
     val micMuted: Boolean = false,
-)
+) {
+    val thresholdDbfs: Float get() = config.thresholdDbfs
+    val preset: DetectionPreset get() = config.preset
+}
 
 /** `/control` 처리 후 플랫폼이 해야 할 일. 엔진은 포그라운드 서비스를 직접 켜고 끌 수 없다. */
 enum class ControlEffect {
@@ -78,11 +82,9 @@ class SensorEngine(
     @Volatile
     private var stream: ActiveStream? = null
 
+    // 다음 프레임에 적용할 설정. onControl / 화면에서 온다
     @Volatile
-    private var pendingThreshold: Float? = null
-
-    @Volatile
-    private var pendingPreset: DetectionPreset? = null
+    private var pendingConfig: DetectionConfig? = null
 
     // startStream / stopStream 은 녹음 코루틴과 리스너 스레드에서 동시에 올 수 있음
     private val streamLock = Any()
@@ -103,16 +105,18 @@ class SensorEngine(
         frames: Flow<ShortArray>,
         alerts: AlertSink,
         streams: StreamSinkFactory,
-        preset: DetectionPreset = DetectionPreset.DEFAULT,
+        config: DetectionConfig = _state.value.config,
     ) = coroutineScope {
-        var detector = preset.newDetector()
-        pendingPreset = null
+        val startConfig = (pendingConfig ?: config).clamped()
+        pendingConfig = null
+        var detector = startConfig.newDetector()
         runScope = this
         streamSinks = streams
-        _state.update {
-            it.copy(running = true, preset = preset, thresholdDbfs = detector.thresholdDbfs, error = null)
-        }
-        log.i("monitoring started, preset=$preset, threshold=${detector.thresholdDbfs} dBFS")
+        _state.update { it.copy(running = true, config = startConfig, error = null) }
+        log.i(
+            "monitoring started, preset=${startConfig.preset}, threshold=${startConfig.thresholdDbfs} dBFS, " +
+                "cooldown=${startConfig.cooldownMs / 1000}s",
+        )
 
         var frameCount = 0L
         var maxSinceHeartbeat = Constants.Audio.MIN_DBFS
@@ -122,17 +126,19 @@ class SensorEngine(
                 // 라이브 듣기 중이면 같은 프레임을 수신기로도 (대기열이 넘치면 오래된 것부터 버림)
                 stream?.queue?.trySend(frame)
 
-                pendingPreset?.let { p ->
-                    pendingPreset = null
-                    detector = p.newDetector()
-                    _state.update { it.copy(preset = p, thresholdDbfs = p.thresholdDbfs) }
-                    log.i("preset changed to $p, threshold=${p.thresholdDbfs} dBFS")
-                }
-                pendingThreshold?.let { t ->
-                    pendingThreshold = null
-                    detector.thresholdDbfs = t
-                    _state.update { it.copy(thresholdDbfs = t) }
-                    log.i("threshold changed to $t dBFS")
+                pendingConfig?.let { c ->
+                    pendingConfig = null
+                    val old = _state.value.config
+                    if (c.preset != old.preset) {
+                        // 프리셋이 바뀌면 지속 조건도 달라지므로 판정을 새로 시작
+                        detector = c.newDetector()
+                        log.i("preset changed to ${c.preset}, threshold=${c.thresholdDbfs} dBFS")
+                    } else {
+                        detector.thresholdDbfs = c.thresholdDbfs
+                        detector.cooldownMs = c.cooldownMs
+                        log.i("config changed: threshold=${c.thresholdDbfs} dBFS, cooldown=${c.cooldownMs / 1000}s")
+                    }
+                    _state.update { it.copy(config = c) }
                 }
 
                 val dbfs = AudioLevel.dbfs(frame)
@@ -210,8 +216,15 @@ class SensorEngine(
                 ControlResult(Constants.CONTROL_REPLY_OK)
             }
             is ControlCommand.SetThreshold -> {
-                pendingThreshold = cmd.db
-                if (!running) _state.update { it.copy(thresholdDbfs = cmd.db) }
+                setConfig(currentConfig().copy(thresholdDbfs = cmd.db))
+                ControlResult(Constants.CONTROL_REPLY_OK)
+            }
+            is ControlCommand.SetCooldown -> {
+                setConfig(currentConfig().copy(cooldownMs = cmd.ms))
+                ControlResult(Constants.CONTROL_REPLY_OK)
+            }
+            is ControlCommand.SetPreset -> {
+                setConfig(DetectionConfig.of(cmd.preset))
                 ControlResult(Constants.CONTROL_REPLY_OK)
             }
             null -> ControlResult(Constants.CONTROL_REPLY_UNKNOWN)
@@ -222,13 +235,22 @@ class SensorEngine(
      * 감지 프리셋 변경 (집 안 / 차 안). 모니터링 중이면 다음 프레임부터 새 조건으로 판정
      * (판정 구간·쿨다운도 새로 시작).
      */
-    fun setPreset(preset: DetectionPreset) {
+    fun setPreset(preset: DetectionPreset) = setConfig(DetectionConfig.of(preset))
+
+    /**
+     * 감지 설정 변경 (설정 화면, `/control SET_*`). 범위 밖 값은 가장자리로.
+     * 모니터링 중이면 다음 프레임부터, 아니면 바로 상태에 반영 (플랫폼이 상태를 보고 저장).
+     */
+    fun setConfig(config: DetectionConfig) {
+        val c = config.clamped()
         if (_state.value.running) {
-            pendingPreset = preset
+            pendingConfig = c
         } else {
-            _state.update { it.copy(preset = preset, thresholdDbfs = preset.thresholdDbfs) }
+            _state.update { it.copy(config = c) }
         }
     }
+
+    private fun currentConfig(): DetectionConfig = pendingConfig ?: _state.value.config
 
     /** 플랫폼 쪽 실패(권한 없음 등)를 상태에 남긴다. */
     fun reportError(message: String) {

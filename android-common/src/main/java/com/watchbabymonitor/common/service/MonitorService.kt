@@ -78,7 +78,7 @@ class MonitorService : Service() {
                 frames = AudioCapture().frames(),
                 alerts = DataLayerAlertSink(this, AndroidLog("MonitorService")),
                 streams = StreamSinkFactory { nodeId -> Streamer(this, nodeId) },
-                preset = RoleStore.preset(this).value,
+                config = RoleStore.config(this).value,
             )
         } catch (e: CancellationException) {
             throw e

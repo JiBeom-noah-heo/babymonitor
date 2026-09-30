@@ -3,6 +3,7 @@ package com.watchbabymonitor.common
 import android.content.Context
 import android.os.BatteryManager
 import com.watchbabymonitor.common.datalayer.StatusSync
+import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DeviceStatus
 import com.watchbabymonitor.shared.Role
 import com.watchbabymonitor.shared.engine.StreamPhase
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -44,6 +46,12 @@ object StatusHub {
         LinkMonitor.start(app)
         PeerAlerts.start(app)
 
+        // 저장된 감지 설정을 엔진에, 엔진에서 바뀐 설정(원격 SET_* 포함)은 저장 (Phase 6)
+        Engines.sensor.setConfig(RoleStore.config(app).value)
+        scope.launch {
+            Engines.sensor.state.map { it.config }.distinctUntilChanged().collect { RoleStore.setConfig(app, it) }
+        }
+
         // 내 상태: 역할·모니터링·스트리밍·오류가 바뀔 때만 (레벨처럼 100ms 마다 바뀌는 값은 제외)
         scope.launch {
             combine(
@@ -53,8 +61,8 @@ object StatusHub {
                 BatteryLog.percent,
             ) { role, sensor, receiver, battery ->
                 when (role) {
-                    Role.SENSOR -> Snapshot(role, sensor.running, sensor.streaming, sensor.micMuted, battery, sensor.error)
-                    Role.RECEIVER -> Snapshot(role, false, receiver.phase != StreamPhase.IDLE, false, battery, receiver.error)
+                    Role.SENSOR -> Snapshot(role, sensor.running, sensor.streaming, sensor.micMuted, battery, sensor.error, sensor.config)
+                    Role.RECEIVER -> Snapshot(role, false, receiver.phase != StreamPhase.IDLE, false, battery, receiver.error, null)
                 }
             }.distinctUntilChanged().collect { snap ->
                 val status = DeviceStatus(
@@ -63,6 +71,7 @@ object StatusHub {
                     streaming = snap.streaming,
                     batteryPercent = snap.battery ?: batteryPercent(app),
                     micMuted = snap.micMuted,
+                    config = snap.config,
                     error = snap.error,
                     ts = System.currentTimeMillis(),
                 )
@@ -112,6 +121,7 @@ object StatusHub {
         val micMuted: Boolean,
         val battery: Int?,
         val error: String?,
+        val config: DetectionConfig?,
     )
 
     private fun batteryPercent(context: Context): Int? =

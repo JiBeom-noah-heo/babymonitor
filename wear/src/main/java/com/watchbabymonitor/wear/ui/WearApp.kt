@@ -76,7 +76,8 @@ fun WearApp() {
     val context = LocalContext.current
     val ping by ControlEvents.ping.collectAsState()
     val role by RoleStore.role(context).collectAsState()
-    val preset by RoleStore.preset(context).collectAsState()
+    val config by RoleStore.config(context).collectAsState()
+    val preset = config.preset
     val sensor by Engines.sensor.state.collectAsState()
     val receiver by Engines.receiver.state.collectAsState()
     val peer by StatusHub.peer.collectAsState()

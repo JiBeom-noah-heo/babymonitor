@@ -2,7 +2,8 @@ package com.watchbabymonitor.shared
 
 /**
  * 수신기 → 감지기 `/control` 명령 (CLAUDE.md §3). 와이어 포맷은 UTF-8 문자열:
- * `PING`, `START`, `STOP`, `STREAM_ON`, `STREAM_OFF`, `SET_THRESHOLD:<dB>`.
+ * `PING`, `START`, `STOP`, `STREAM_ON`, `STREAM_OFF`, `SET_THRESHOLD:<dB>`,
+ * `SET_COOLDOWN:<ms>`, `SET_PRESET:<HOME|CAR>` (Phase 6, ADR 007).
  */
 sealed interface ControlCommand {
     fun encode(): String
@@ -36,20 +37,35 @@ sealed interface ControlCommand {
         override fun encode() = "$SET_THRESHOLD_PREFIX$db"
     }
 
+    /** 쿨다운 변경 (ms). */
+    data class SetCooldown(val ms: Long) : ControlCommand {
+        override fun encode() = "$SET_COOLDOWN_PREFIX$ms"
+    }
+
+    /** 프리셋 변경. 임계값·쿨다운도 프리셋 기본값으로. */
+    data class SetPreset(val preset: DetectionPreset) : ControlCommand {
+        override fun encode() = "$SET_PRESET_PREFIX${preset.name}"
+    }
+
     fun toBytes(): ByteArray = encode().toByteArray(Charsets.UTF_8)
 
     companion object {
         private const val SET_THRESHOLD_PREFIX = "SET_THRESHOLD:"
+        private const val SET_COOLDOWN_PREFIX = "SET_COOLDOWN:"
+        private const val SET_PRESET_PREFIX = "SET_PRESET:"
 
         private val simple = listOf(Ping, Start, Stop, StreamOn, StreamOff).associateBy { it.encode() }
 
         /** 알 수 없는 명령이면 null. */
-        fun decode(raw: String): ControlCommand? =
-            simple[raw] ?: if (raw.startsWith(SET_THRESHOLD_PREFIX)) {
+        fun decode(raw: String): ControlCommand? = simple[raw] ?: when {
+            raw.startsWith(SET_THRESHOLD_PREFIX) ->
                 raw.removePrefix(SET_THRESHOLD_PREFIX).toFloatOrNull()?.let(::SetThreshold)
-            } else {
-                null
-            }
+            raw.startsWith(SET_COOLDOWN_PREFIX) ->
+                raw.removePrefix(SET_COOLDOWN_PREFIX).toLongOrNull()?.takeIf { it >= 0 }?.let(::SetCooldown)
+            raw.startsWith(SET_PRESET_PREFIX) ->
+                DetectionPreset.entries.firstOrNull { it.name == raw.removePrefix(SET_PRESET_PREFIX) }?.let(::SetPreset)
+            else -> null
+        }
 
         fun fromBytes(bytes: ByteArray): ControlCommand? = decode(bytes.toString(Charsets.UTF_8))
     }

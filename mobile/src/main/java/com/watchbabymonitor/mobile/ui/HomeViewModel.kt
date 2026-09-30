@@ -14,6 +14,7 @@ import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.StatusHub
 import com.watchbabymonitor.common.service.ListenerService
 import com.watchbabymonitor.common.service.MonitorService
+import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DetectionPreset
 import com.watchbabymonitor.shared.DeviceStatus
 import com.watchbabymonitor.shared.Role
@@ -56,7 +57,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     val live: StateFlow<ReceiverState> = Engines.receiver.state
     val sensor: StateFlow<SensorState> = Engines.sensor.state
     val role: StateFlow<Role> = RoleStore.role(app)
-    val preset: StateFlow<DetectionPreset> = RoleStore.preset(app)
+    /** 이 기기가 감지기일 때의 감지 설정. */
+    val config: StateFlow<DetectionConfig> = RoleStore.config(app)
 
     /** 상대 기기의 /status. 역할 충돌 경고·원격 제어 버튼에 사용. */
     val peer: StateFlow<DeviceStatus?> = StatusHub.peer
@@ -72,6 +74,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun setRole(role: Role) = RoleControl.switchRole(getApplication(), role)
 
     fun setPreset(preset: DetectionPreset) = RoleControl.setPreset(getApplication(), preset)
+
+    fun setConfig(config: DetectionConfig) = RoleControl.setConfig(getApplication(), config)
 
     /** 감지기 모니터링 시작. 마이크 권한은 화면에서 먼저 받는다. */
     fun startMonitoring() = MonitorService.start(getApplication())

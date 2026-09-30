@@ -1,7 +1,9 @@
 package com.watchbabymonitor.common
 
 import android.content.Context
+import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DetectionPreset
+import com.watchbabymonitor.shared.WbmJson
 import com.watchbabymonitor.shared.Role
 import com.watchbabymonitor.shared.engine.DeviceKind
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,13 +16,14 @@ import kotlinx.coroutines.flow.StateFlow
 object RoleStore {
     private const val PREFS = "wbm_settings"
     private const val KEY_ROLE = "role"
-    private const val KEY_PRESET = "preset"
+    private const val KEY_PRESET = "preset" // Phase 3.5~5, 읽기만 (config 로 이전)
+    private const val KEY_CONFIG = "config"
 
     @Volatile
     private var roleFlow: MutableStateFlow<Role>? = null
 
     @Volatile
-    private var presetFlow: MutableStateFlow<DetectionPreset>? = null
+    private var configFlow: MutableStateFlow<DetectionConfig>? = null
 
     fun role(context: Context): StateFlow<Role> = roleState(context)
 
@@ -31,11 +34,13 @@ object RoleStore {
         roleState(context).value = role
     }
 
-    fun preset(context: Context): StateFlow<DetectionPreset> = presetState(context)
+    /** 감지 설정 (프리셋 + 임계값·쿨다운 조정, Phase 6). 이 기기가 감지기일 때 쓰인다. */
+    fun config(context: Context): StateFlow<DetectionConfig> = configState(context)
 
-    fun setPreset(context: Context, preset: DetectionPreset) {
-        prefs(context).edit().putString(KEY_PRESET, preset.name).apply()
-        presetState(context).value = preset
+    fun setConfig(context: Context, config: DetectionConfig) {
+        if (configState(context).value == config) return
+        prefs(context).edit().putString(KEY_CONFIG, WbmJson.encodeToString(DetectionConfig.serializer(), config)).apply()
+        configState(context).value = config
     }
 
     fun defaultRole(context: Context): Role = when (DeviceInfo.kind(context)) {
@@ -52,14 +57,23 @@ object RoleStore {
             ).also { roleFlow = it }
         }
 
-    private fun presetState(context: Context): MutableStateFlow<DetectionPreset> =
-        presetFlow ?: synchronized(this) {
-            presetFlow ?: MutableStateFlow(
-                prefs(context).getString(KEY_PRESET, null)
-                    ?.let { runCatching { DetectionPreset.valueOf(it) }.getOrNull() }
-                    ?: DetectionPreset.DEFAULT,
-            ).also { presetFlow = it }
+    private fun configState(context: Context): MutableStateFlow<DetectionConfig> =
+        configFlow ?: synchronized(this) {
+            configFlow ?: MutableStateFlow(loadConfig(context)).also { configFlow = it }
         }
+
+    private fun loadConfig(context: Context): DetectionConfig {
+        val p = prefs(context)
+        p.getString(KEY_CONFIG, null)?.let { json ->
+            runCatching { WbmJson.decodeFromString(DetectionConfig.serializer(), json) }.getOrNull()
+                ?.let { return it.clamped() }
+        }
+        // 예전 버전은 프리셋 이름만 저장했다
+        val preset = p.getString(KEY_PRESET, null)
+            ?.let { runCatching { DetectionPreset.valueOf(it) }.getOrNull() }
+            ?: DetectionPreset.DEFAULT
+        return DetectionConfig.of(preset)
+    }
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

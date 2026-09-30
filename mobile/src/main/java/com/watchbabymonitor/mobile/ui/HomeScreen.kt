@@ -60,7 +60,8 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
     val live by viewModel.live.collectAsStateWithLifecycle()
     val sensor by viewModel.sensor.collectAsStateWithLifecycle()
     val role by viewModel.role.collectAsStateWithLifecycle()
-    val preset by viewModel.preset.collectAsStateWithLifecycle()
+    val config by viewModel.config.collectAsStateWithLifecycle()
+    val preset = config.preset
     val peer by viewModel.peer.collectAsStateWithLifecycle()
     val link by viewModel.link.collectAsStateWithLifecycle()
 

@@ -21,6 +21,8 @@ data class DeviceStatus(
     val lastDbfs: Float? = null,
     /** 감지기 마이크 입력이 완전히 0 (통화 중 등, Phase 5). */
     val micMuted: Boolean = false,
+    /** 감지기의 현재 감지 설정 (Phase 6). 수신기 설정 화면에 표시. 수신기면 null. */
+    val config: DetectionConfig? = null,
     val error: String? = null,
     val ts: Long,
 ) {

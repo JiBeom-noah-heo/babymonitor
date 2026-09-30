@@ -15,7 +15,7 @@ class NoiseDetector(
     sustainMs: Int = Constants.Alert.SUSTAIN_MS,
     windowMs: Int = Constants.Alert.SUSTAIN_WINDOW_MS,
     frameMs: Int = Constants.Audio.LEVEL_WINDOW_MS,
-    private val cooldownMs: Long = Constants.Alert.COOLDOWN_MS,
+    cooldownMs: Long = Constants.Alert.COOLDOWN_MS,
 ) {
     init {
         require(frameMs > 0) { "frameMs=$frameMs" }
@@ -25,6 +25,13 @@ class NoiseDetector(
 
     /** 임계값. `/control SET_THRESHOLD` 로 바뀔 수 있다. */
     var thresholdDbfs: Float = thresholdDbfs
+
+    /** 쿨다운. `/control SET_COOLDOWN` 으로 바뀔 수 있다 (Phase 6). */
+    var cooldownMs: Long = cooldownMs
+        set(value) {
+            require(value >= 0) { "cooldownMs=$value" }
+            field = value
+        }
 
     val windowFrames: Int = windowMs / frameMs
     val minAboveFrames: Int = sustainMs / frameMs

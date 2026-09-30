@@ -3,6 +3,7 @@ package com.watchbabymonitor.shared.engine
 import com.watchbabymonitor.shared.Clock
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
+import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DetectionPreset
 import com.watchbabymonitor.shared.NoiseAlert
 import kotlinx.coroutines.CompletableDeferred
@@ -289,9 +290,9 @@ class SensorEngineTest {
         // -30 dBFS 가 1.5초: 집 안(-35)이면 알림, 차 안(-25)이면 무시
         val mid = ShortArray(Constants.Audio.SAMPLES_PER_WINDOW) { 1036 } // 약 -30 dBFS
         val home = FakeAlerts()
-        engine().run(flow { repeat(15) { emit(mid) } }, home, FakeStreams(), DetectionPreset.HOME)
+        engine().run(flow { repeat(15) { emit(mid) } }, home, FakeStreams(), DetectionConfig.of(DetectionPreset.HOME))
         val car = FakeAlerts()
-        engine().run(flow { repeat(15) { emit(mid) } }, car, FakeStreams(), DetectionPreset.CAR)
+        engine().run(flow { repeat(15) { emit(mid) } }, car, FakeStreams(), DetectionConfig.of(DetectionPreset.CAR))
         assertEquals(1, home.sent.size)
         assertTrue(car.sent.isEmpty())
     }
@@ -301,9 +302,9 @@ class SensorEngineTest {
         val alerts = FakeAlerts()
         val louder = ShortArray(Constants.Audio.SAMPLES_PER_WINDOW) { 16384 } // 약 -6 dBFS
         // 1.0초는 차 안 기준(1.5초) 미달, 1.5초면 알림
-        engine().run(flow { repeat(10) { emit(louder) }; repeat(30) { emit(quiet) } }, alerts, FakeStreams(), DetectionPreset.CAR)
+        engine().run(flow { repeat(10) { emit(louder) }; repeat(30) { emit(quiet) } }, alerts, FakeStreams(), DetectionConfig.of(DetectionPreset.CAR))
         assertTrue(alerts.sent.isEmpty())
-        engine().run(flow { repeat(15) { emit(louder) } }, alerts, FakeStreams(), DetectionPreset.CAR)
+        engine().run(flow { repeat(15) { emit(louder) } }, alerts, FakeStreams(), DetectionConfig.of(DetectionPreset.CAR))
         assertEquals(1, alerts.sent.size)
     }
 
@@ -356,6 +357,45 @@ class SensorEngineTest {
         repeat(100) { input.send(quiet) }
         runCurrent()
         assertFalse(e.state.value.micMuted)
+    }
+
+    // ---- 설정 (Phase 6) ----
+
+    @Test
+    fun setCooldown_viaControl_appliesWithoutResettingPreset() = runTest {
+        val e = engine()
+        val alerts = FakeAlerts()
+        val input = startEngine(e, alerts = alerts)
+        assertEquals(ControlResult("OK"), e.onControl(ControlCommand.SetCooldown(10_000), "p", false))
+        repeat(110) { input.send(loud) } // 11초 계속 시끄러움
+        runCurrent()
+        assertEquals(10_000L, e.state.value.config.cooldownMs)
+        assertEquals(DetectionPreset.HOME, e.state.value.preset)
+        assertEquals("1초, 11초에 알림 (쿨다운 10초)", 2, alerts.sent.size)
+    }
+
+    @Test
+    fun setPreset_viaControl_resetsCustomValues() {
+        val e = engine()
+        e.onControl(ControlCommand.SetThreshold(-40f), "p", false)
+        e.onControl(ControlCommand.SetPreset(DetectionPreset.CAR), "p", false)
+        assertEquals(DetectionConfig.of(DetectionPreset.CAR), e.state.value.config)
+    }
+
+    @Test
+    fun setConfig_clampsOutOfRange() {
+        val e = engine()
+        e.setConfig(DetectionConfig(thresholdDbfs = -200f, cooldownMs = 1))
+        assertEquals(DetectionConfig.MIN_THRESHOLD_DBFS, e.state.value.thresholdDbfs, 0f)
+        assertEquals(DetectionConfig.MIN_COOLDOWN_MS, e.state.value.config.cooldownMs)
+    }
+
+    @Test
+    fun run_usesConfigSetWhileIdle() = runTest {
+        val e = engine()
+        e.setConfig(DetectionConfig(thresholdDbfs = -10f))
+        startEngine(e)
+        assertEquals(-10f, e.state.value.thresholdDbfs, 0f)
     }
 
     @Test

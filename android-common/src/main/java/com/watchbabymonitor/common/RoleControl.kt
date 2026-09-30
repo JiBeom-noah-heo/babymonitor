@@ -5,6 +5,7 @@ import android.util.Log
 import com.watchbabymonitor.common.service.ListenerService
 import com.watchbabymonitor.common.service.MonitorService
 import com.watchbabymonitor.shared.Constants
+import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DetectionPreset
 import com.watchbabymonitor.shared.Role
 
@@ -25,8 +26,12 @@ object RoleControl {
         Log.i(TAG, "role changed $current -> $role")
     }
 
-    fun setPreset(context: Context, preset: DetectionPreset) {
-        RoleStore.setPreset(context, preset)
-        Engines.sensor.setPreset(preset)
+    fun setPreset(context: Context, preset: DetectionPreset) = setConfig(context, DetectionConfig.of(preset))
+
+    /** 감지 설정 변경 (설정 화면). 저장하고 모니터링 중이면 다음 프레임부터 적용. */
+    fun setConfig(context: Context, config: DetectionConfig) {
+        val c = config.clamped()
+        RoleStore.setConfig(context, c)
+        Engines.sensor.setConfig(c)
     }
 }
