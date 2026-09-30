@@ -1,6 +1,8 @@
 package com.watchbabymonitor.wear.service
 
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.WearableListenerService
@@ -22,26 +24,24 @@ class ControlReceiver : WearableListenerService() {
             return null
         }
 
-        val cmd = legacyToStream(ControlCommand.fromBytes(request))
+        val cmd = ControlCommand.fromBytes(request)
         if (cmd == ControlCommand.Ping) ControlEvents.onPing(nodeId)
 
-        // TODO(refactor 6단계): 원격 START 로 모니터링 시작 (앱이 화면에 있을 때만) + 사용자 알림
-        val result = Sensor.engine.onControl(cmd, nodeId, canStartMonitoring = false)
+        val result = Sensor.engine.onControl(cmd, nodeId, canStartMonitoring = isAppVisible())
         Log.i(TAG, "${cmd?.encode() ?: "UNKNOWN(${request.size}B)"} from=$nodeId -> ${result.reply}")
         when (result.effect) {
+            ControlEffect.START_MONITORING -> MonitorService.start(this)
             ControlEffect.STOP_MONITORING -> MonitorService.stop(this)
-            ControlEffect.START_MONITORING, ControlEffect.PROMPT_USER_TO_START, null -> Unit
+            ControlEffect.PROMPT_USER_TO_START -> StartPrompt.show(this)
+            null -> Unit
         }
         return Tasks.forResult(result.reply.toByteArray(Charsets.UTF_8))
     }
 
     /**
-     * TODO(refactor 6단계에서 제거): 폰은 아직 스트리밍 제어에 START/STOP 을 보낸다.
-     * 폰이 STREAM_ON/OFF 로 바뀌기 전까지 옛 의미로 해석.
+     * 앱 화면이 떠 있으면 마이크 포그라운드 서비스를 시작할 수 있다.
+     * 백그라운드면 Android 가 막으므로 사용자에게 알림으로 요청한다 (ADR 004).
      */
-    private fun legacyToStream(cmd: ControlCommand?): ControlCommand? = when (cmd) {
-        ControlCommand.Start -> ControlCommand.StreamOn
-        ControlCommand.Stop -> ControlCommand.StreamOff
-        else -> cmd
-    }
+    private fun isAppVisible(): Boolean =
+        ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
 }

@@ -133,9 +133,8 @@ class ListenerService : Service() {
             val opened = CompletableDeferred<ChannelClient.Channel>()
             channelOpened = opened
 
-            // TODO(refactor 6단계): STREAM_ON 으로 전환 (워치는 임시로 START 를 STREAM_ON 으로 해석)
-            val reply = control.send(node.id, ControlCommand.Start)
-            Log.i(TAG, "START -> $reply")
+            val reply = control.send(node.id, ControlCommand.StreamOn)
+            Log.i(TAG, "STREAM_ON -> $reply")
             engine.onStreamOnReply(reply)?.let {
                 end = it
                 detail = reply
@@ -223,10 +222,9 @@ class ListenerService : Service() {
         activeChannel = null
         if (sensorNodeId != null) {
             try {
-                // TODO(refactor 6단계): STREAM_OFF 로 전환
-                control.send(sensorNodeId, ControlCommand.Stop, STOP_TIMEOUT_MS)
+                control.send(sensorNodeId, ControlCommand.StreamOff, STOP_TIMEOUT_MS)
             } catch (e: Exception) {
-                Log.w(TAG, "STOP not delivered", e)
+                Log.w(TAG, "STREAM_OFF not delivered", e)
             }
         }
         try {
