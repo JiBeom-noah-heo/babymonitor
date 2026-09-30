@@ -1,5 +1,6 @@
 package com.watchbabymonitor.common.service
 
+import com.watchbabymonitor.common.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -304,7 +305,7 @@ class ListenerService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off)
+            .setSmallIcon(R.drawable.ic_stat_monitor)
             .setContentTitle(DeviceInfo.appLabel(this))
             .setContentText("아기 쪽 소리 듣는 중")
             .setOngoing(true)

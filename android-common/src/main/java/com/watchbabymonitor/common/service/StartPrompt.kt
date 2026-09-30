@@ -1,5 +1,6 @@
 package com.watchbabymonitor.common.service
 
+import com.watchbabymonitor.common.R
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -42,7 +43,7 @@ object StartPrompt {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.drawable.ic_stat_monitor)
             .setContentTitle("모니터링 시작 요청")
             .setContentText("탭해서 모니터링 시작")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

@@ -1,5 +1,6 @@
 package com.watchbabymonitor.common.service
 
+import com.watchbabymonitor.common.R
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -116,7 +117,7 @@ class MonitorService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.drawable.ic_stat_monitor)
             .setContentTitle(DeviceInfo.appLabel(this))
             .setContentText("소리 감시 중")
             .setOngoing(true)

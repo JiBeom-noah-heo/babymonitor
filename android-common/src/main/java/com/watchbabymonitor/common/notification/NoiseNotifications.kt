@@ -1,5 +1,6 @@
 package com.watchbabymonitor.common.notification
 
+import com.watchbabymonitor.common.R
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -55,7 +56,7 @@ object NoiseNotifications {
         )
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(alert.ts))
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_stat_monitor)
             .setContentTitle("아기 쪽에서 소리가 나요")
             .setContentText("$time · ${alert.level.roundToInt()} dB")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
