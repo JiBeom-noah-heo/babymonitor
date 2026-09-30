@@ -9,7 +9,10 @@ import com.google.android.gms.wearable.Node
 import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.common.LinkMonitor
 import com.watchbabymonitor.common.LinkState
+import com.watchbabymonitor.common.ReceiverPrefs
 import com.watchbabymonitor.common.RoleControl
+import com.watchbabymonitor.common.history.HistoryRecorder
+import com.watchbabymonitor.common.history.NoiseEvent
 import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.StatusHub
 import com.watchbabymonitor.common.service.ListenerService
@@ -26,7 +29,9 @@ import com.watchbabymonitor.shared.ControlCommand
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -76,6 +81,50 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun setPreset(preset: DetectionPreset) = RoleControl.setPreset(getApplication(), preset)
 
     fun setConfig(config: DetectionConfig) = RoleControl.setConfig(getApplication(), config)
+
+    val receiverPrefs: StateFlow<ReceiverPrefs> = RoleStore.receiverPrefs(app)
+
+    fun setReceiverPrefs(prefs: ReceiverPrefs) = RoleStore.setReceiverPrefs(getApplication(), prefs)
+
+    /** 소음 이벤트 기록 (최근 200건). */
+    val history: StateFlow<List<NoiseEvent>> = HistoryRecorder.recent(app)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun clearHistory() = HistoryRecorder.clear(getApplication())
+
+    /**
+     * 이 폰이 수신기일 때 감지기 설정을 원격으로 바꾼다 (`/control SET_*`, ADR 007).
+     * 바뀐 항목만 보내고, 감지기가 /status 로 새 설정을 알려오면 화면이 갱신된다.
+     */
+    fun setRemoteConfig(old: DetectionConfig, new: DetectionConfig) {
+        val cmds = buildList {
+            if (new.preset != old.preset) {
+                add(ControlCommand.SetPreset(new.preset))
+            } else {
+                if (new.thresholdDbfs != old.thresholdDbfs) add(ControlCommand.SetThreshold(new.thresholdDbfs))
+                if (new.cooldownMs != old.cooldownMs) add(ControlCommand.SetCooldown(new.cooldownMs))
+            }
+        }
+        if (cmds.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val node = control.connectedNodes().firstOrNull() ?: run {
+                    appendLog("연결된 감지기 없음")
+                    return@launch
+                }
+                for (cmd in cmds) {
+                    val reply = control.send(node.id, cmd)
+                    Log.i(TAG, "${cmd.encode()} ${node.displayName} -> $reply")
+                    if (reply != Constants.CONTROL_REPLY_OK) appendLog("${node.displayName} 설정 실패: $reply")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "remote config failed", e)
+                appendLog("감지기 설정 실패: ${e.message}")
+            }
+        }
+    }
 
     /** 감지기 모니터링 시작. 마이크 권한은 화면에서 먼저 받는다. */
     fun startMonitoring() = MonitorService.start(getApplication())

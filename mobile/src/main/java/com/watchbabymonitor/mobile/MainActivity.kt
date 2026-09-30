@@ -20,7 +20,7 @@ import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.notification.NoiseNotifications
 import com.watchbabymonitor.common.service.MonitorService
 import com.watchbabymonitor.common.service.StartPrompt
-import com.watchbabymonitor.mobile.ui.HomeScreen
+import com.watchbabymonitor.mobile.ui.AppRoot
 import com.watchbabymonitor.mobile.ui.theme.WatchBabyMonitorTheme
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.Role
@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             WatchBabyMonitorTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    HomeScreen(Modifier.padding(innerPadding))
+                    AppRoot(Modifier.padding(innerPadding))
                 }
             }
         }

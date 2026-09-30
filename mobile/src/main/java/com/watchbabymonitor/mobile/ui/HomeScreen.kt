@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,7 +56,12 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewModel()) {
+fun HomeScreen(
+    modifier: Modifier = Modifier,
+    viewModel: HomeViewModel = viewModel(),
+    onOpenSettings: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val live by viewModel.live.collectAsStateWithLifecycle()
     val sensor by viewModel.sensor.collectAsStateWithLifecycle()
@@ -95,6 +101,8 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
         state = state,
         onRefreshNodes = viewModel::refreshNodes,
         onPing = viewModel::pingAll,
+        onOpenSettings = onOpenSettings,
+        onOpenHistory = onOpenHistory,
         modifier = modifier,
     )
 }
@@ -116,6 +124,8 @@ private fun HomeContent(
     state: HomeUiState,
     onRefreshNodes: () -> Unit,
     onPing: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenHistory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -123,7 +133,13 @@ private fun HomeContent(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { Text("베이비 모니터", style = MaterialTheme.typography.headlineSmall) }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("베이비 모니터", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onOpenHistory) { Text("기록") }
+                TextButton(onClick = onOpenSettings) { Text("설정") }
+            }
+        }
         item { RoleCard(role = role, peer = peer, link = link, onRoleChange = onRoleChange) }
         when (role) {
             Role.SENSOR -> item {
@@ -389,6 +405,8 @@ private fun HomeContentPreview() {
             ),
             onRefreshNodes = {},
             onPing = {},
+            onOpenSettings = {},
+            onOpenHistory = {},
         )
     }
 }
