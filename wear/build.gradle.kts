@@ -12,7 +12,7 @@ android {
         // Data Layer 통신 조건: mobile 모듈과 applicationId 동일해야 함
         applicationId = "com.watchbabymonitor"
         minSdk = 30
-        targetSdk = 33
+        targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.fragment)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.tooling.preview)
