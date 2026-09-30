@@ -1,8 +1,11 @@
 package com.watchbabymonitor.wear.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,15 +40,18 @@ import androidx.core.content.ContextCompat
 import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.scrollAway
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.common.Engines
 import com.watchbabymonitor.common.Link
 import com.watchbabymonitor.common.LinkMonitor
+import com.watchbabymonitor.common.ReceiverPrefs
 import com.watchbabymonitor.common.RoleControl
 import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.StatusHub
@@ -82,6 +88,7 @@ fun WearApp() {
     val receiver by Engines.receiver.state.collectAsState()
     val peer by StatusHub.peer.collectAsState()
     val link by LinkMonitor.state.collectAsState()
+    val receiverPrefs by RoleStore.receiverPrefs(context).collectAsState()
     var connected by remember { mutableStateOf("확인 중…") }
 
     fun granted(permission: String) =
@@ -135,6 +142,14 @@ fun WearApp() {
         onLiveToggle = {
             if (receiver.phase == StreamPhase.IDLE) ListenerService.start(context) else ListenerService.stop(context)
         },
+        receiverPrefs = receiverPrefs,
+        onReceiverPrefs = { RoleStore.setReceiverPrefs(context, it) },
+        onOpenSettings = {
+            // 권한을 두 번 거부하면 다시 묻지 않으므로 앱 정보 화면으로 (Phase 2 에서 미룬 항목)
+            context.startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+            )
+        },
         onRoleToggle = {
             val next = role.opposite
             RoleControl.switchRole(context, next)
@@ -168,8 +183,12 @@ private fun WearScreen(
     onMonitoringToggle: () -> Unit,
     onPresetToggle: () -> Unit,
     onLiveToggle: () -> Unit,
+    receiverPrefs: ReceiverPrefs,
+    onReceiverPrefs: (ReceiverPrefs) -> Unit,
+    onOpenSettings: () -> Unit,
     onRoleToggle: () -> Unit,
 ) {
+    val listState = rememberScalingLazyListState()
     MaterialTheme {
         Box(
             modifier = Modifier
@@ -178,6 +197,7 @@ private fun WearScreen(
         ) {
             ScalingLazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = listState,
                 autoCentering = AutoCenteringParams(itemIndex = 1),
             ) {
                 item { Caption(header) }
@@ -200,8 +220,8 @@ private fun WearScreen(
                     }
                 }
                 when (role) {
-                    Role.SENSOR -> sensorItems(sensor, preset, micDenied, onMonitoringToggle, onPresetToggle)
-                    Role.RECEIVER -> receiverItems(receiver, peer, onLiveToggle)
+                    Role.SENSOR -> sensorItems(sensor, preset, micDenied, onMonitoringToggle, onPresetToggle, onOpenSettings)
+                    Role.RECEIVER -> receiverItems(receiver, peer, onLiveToggle, receiverPrefs, onReceiverPrefs)
                 }
                 item {
                     CompactChip(
@@ -211,7 +231,8 @@ private fun WearScreen(
                     )
                 }
             }
-            TimeText()
+            // 스크롤하면 시계가 위로 사라진다 (Phase 3.5 에서 목록과 겹치던 문제)
+            TimeText(modifier = Modifier.scrollAway(listState))
         }
     }
 }
@@ -240,6 +261,7 @@ private fun ScalingLazyListScope.sensorItems(
     micDenied: Boolean,
     onMonitoringToggle: () -> Unit,
     onPresetToggle: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     item {
         Text(
@@ -269,6 +291,15 @@ private fun ScalingLazyListScope.sensorItems(
             colors = ChipDefaults.secondaryChipColors(),
         )
     }
+    if (micDenied) {
+        item {
+            CompactChip(
+                onClick = onOpenSettings,
+                label = { Text("권한 설정 열기") },
+                colors = ChipDefaults.secondaryChipColors(),
+            )
+        }
+    }
 }
 
 /** 수신기: 마지막 알림(레벨), 감지기 상태, 라이브 듣기. 알림은 진동 우선 (CLAUDE.md §4-7). */
@@ -276,6 +307,8 @@ private fun ScalingLazyListScope.receiverItems(
     receiver: ReceiverState,
     peer: DeviceStatus?,
     onLiveToggle: () -> Unit,
+    prefs: ReceiverPrefs,
+    onPrefs: (ReceiverPrefs) -> Unit,
 ) {
     val last: NoiseAlert? = receiver.lastAlert
     item {
@@ -319,6 +352,21 @@ private fun ScalingLazyListScope.receiverItems(
         item {
             Text(err, style = MaterialTheme.typography.caption3, color = MaterialTheme.colors.error, textAlign = TextAlign.Center)
         }
+    }
+    item {
+        CompactChip(
+            onClick = { onPrefs(prefs.copy(autoListen = !prefs.autoListen)) },
+            label = { Text("자동 듣기: ${if (prefs.autoListen) "켬" else "끔"}") },
+            colors = ChipDefaults.secondaryChipColors(),
+        )
+    }
+    item {
+        // 원격(클라우드)이면 소리가 구글 서버를 거침 → 기본 꺼짐 (CLAUDE.md §8)
+        CompactChip(
+            onClick = { onPrefs(prefs.copy(allowRemoteLive = !prefs.allowRemoteLive)) },
+            label = { Text("원격 듣기: ${if (prefs.allowRemoteLive) "허용" else "안 함"}") },
+            colors = ChipDefaults.secondaryChipColors(),
+        )
     }
 }
 
@@ -403,6 +451,9 @@ private fun ReceiverPreview() {
         onMonitoringToggle = {},
         onPresetToggle = {},
         onLiveToggle = {},
+        receiverPrefs = ReceiverPrefs(),
+        onReceiverPrefs = {},
+        onOpenSettings = {},
         onRoleToggle = {},
     )
 }
