@@ -43,7 +43,9 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.google.android.gms.wearable.Wearable
+import com.watchbabymonitor.common.label
 import com.watchbabymonitor.shared.AudioLevel
+import com.watchbabymonitor.wear.AppRole
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.wear.service.ControlEvents
@@ -96,7 +98,7 @@ fun WearApp() {
     }
 
     WearScreen(
-        header = if (ping.count == 0) connected else "$connected · PING ${ping.count}",
+        header = "${AppRole.current.label} · " + if (ping.count == 0) connected else "$connected · PING ${ping.count}",
         monitor = monitor,
         micDenied = micDenied,
         onToggle = {

@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i(TAG, "phone app started")
+        Log.i(TAG, "phone app started, role=${AppRole.current}")
         NoiseNotifications.ensureChannel(this)
         requestNotificationPermissionIfNeeded()
 

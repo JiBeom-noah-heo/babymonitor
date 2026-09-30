@@ -18,7 +18,7 @@ private val TAG = Constants.logTag("MainActivity")
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i(TAG, "watch app started")
+        Log.i(TAG, "watch app started, role=${AppRole.current}")
         setContent { WearApp() }
         if (savedInstanceState == null) handleIntent(intent)
     }
