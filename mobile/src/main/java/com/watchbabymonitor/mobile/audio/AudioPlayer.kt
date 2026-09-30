@@ -7,6 +7,8 @@ import android.os.Build
 import android.util.Log
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.Pcm16
+import com.watchbabymonitor.shared.engine.PlaybackStats
+import com.watchbabymonitor.shared.engine.ReceiverEngine
 
 private val TAG = Constants.logTag("AudioPlayer")
 
@@ -99,6 +101,13 @@ class AudioPlayer {
 
     val underruns: Int get() = underrunsBefore + track.underrunCount
 
+    fun stats() = PlaybackStats(
+        backlogMs = backlogMs,
+        underruns = underruns,
+        droppedMs = Pcm16.bytesToMs(droppedBytes),
+        resyncs = resyncs,
+    )
+
 
     /** 수신한 바이트를 재생 대기열에 넣는다. [length] 는 홀수여도 된다. */
     fun write(data: ByteArray, length: Int) {
@@ -122,7 +131,7 @@ class AudioPlayer {
         }
         if (size == 0) return
 
-        if (started && backlogMs > Constants.Stream.MAX_PLAYBACK_BACKLOG_MS) resync()
+        if (ReceiverEngine.shouldResync(started, backlogMs)) resync()
 
         val written = track.write(scratch, 0, size, AudioTrack.WRITE_BLOCKING)
         check(written >= 0) { "AudioTrack.write error: $written" }

@@ -6,6 +6,8 @@ import com.google.android.gms.wearable.WearableListenerService
 import com.watchbabymonitor.mobile.notification.NoiseNotifications
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
+import com.watchbabymonitor.shared.engine.AlertAction
+import com.watchbabymonitor.shared.engine.DeviceKind
 
 private val TAG = Constants.logTag("WearMessageReceiver")
 
@@ -29,7 +31,11 @@ class WearMessageReceiver : WearableListenerService() {
             return
         }
         Log.i(TAG, "alert level=${alert.level} ts=${alert.ts} from=${event.sourceNodeId}")
-        AlertEvents.emit(alert)
-        NoiseNotifications.show(this, alert)
+        when (Receiver.engine.onAlert(alert, DeviceKind.PHONE)) {
+            AlertAction.NOTIFY_HEADS_UP -> NoiseNotifications.show(this, alert)
+            AlertAction.IGNORE_DUPLICATE -> Log.i(TAG, "duplicate alert ignored ts=${alert.ts}")
+            // 폰은 heads-up. 진동 전용은 워치 수신기(Phase 3.5)
+            AlertAction.VIBRATE -> NoiseNotifications.show(this, alert)
+        }
     }
 }

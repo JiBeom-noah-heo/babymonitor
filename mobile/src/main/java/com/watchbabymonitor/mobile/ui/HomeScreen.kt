@@ -27,8 +27,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.watchbabymonitor.mobile.service.LivePhase
-import com.watchbabymonitor.mobile.service.LiveState
+import com.watchbabymonitor.shared.engine.ReceiverState
+import com.watchbabymonitor.shared.engine.StreamPhase
 import com.watchbabymonitor.mobile.ui.theme.WatchBabyMonitorTheme
 
 @Composable
@@ -48,7 +48,7 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
 @Composable
 private fun HomeContent(
     state: HomeUiState,
-    live: LiveState,
+    live: ReceiverState,
     onLiveChange: (Boolean) -> Unit,
     onRefreshNodes: () -> Unit,
     onPing: () -> Unit,
@@ -118,7 +118,7 @@ private fun HomeContent(
 private fun HomeContentPreview() {
     WatchBabyMonitorTheme {
         HomeContent(
-            live = LiveState(phase = LivePhase.PLAYING, watchName = "Galaxy Watch7", backlogMs = 320, kbps = 256),
+            live = ReceiverState(phase = StreamPhase.PLAYING, peerName = "Galaxy Watch7", backlogMs = 320, kbps = 256),
             onLiveChange = {},
             state = HomeUiState(
                 nodes = listOf(NodeInfo("3a1f9c2e", "Galaxy Watch7", isNearby = true)),
@@ -131,8 +131,8 @@ private fun HomeContentPreview() {
 }
 
 @Composable
-private fun LiveCard(live: LiveState, onLiveChange: (Boolean) -> Unit) {
-    val on = live.phase != LivePhase.IDLE
+private fun LiveCard(live: ReceiverState, onLiveChange: (Boolean) -> Unit) {
+    val on = live.phase != StreamPhase.IDLE
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -140,13 +140,13 @@ private fun LiveCard(live: LiveState, onLiveChange: (Boolean) -> Unit) {
                     Text("라이브 듣기", style = MaterialTheme.typography.titleMedium)
                     Text(
                         when (live.phase) {
-                            LivePhase.IDLE -> "꺼짐"
-                            LivePhase.CONNECTING -> "연결 중…"
-                            LivePhase.PLAYING -> "${live.watchName ?: "워치"} 소리 재생 중"
-                            LivePhase.STALLED -> "소리가 끊겼어요 (기다리는 중)"
+                            StreamPhase.IDLE -> "꺼짐"
+                            StreamPhase.CONNECTING -> "연결 중…"
+                            StreamPhase.PLAYING -> "${live.peerName ?: "감지기"} 소리 재생 중"
+                            StreamPhase.STALLED -> "소리가 끊겼어요 (기다리는 중)"
                         },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (live.phase == LivePhase.STALLED) {
+                        color = if (live.phase == StreamPhase.STALLED) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -155,7 +155,7 @@ private fun LiveCard(live: LiveState, onLiveChange: (Boolean) -> Unit) {
                 }
                 Switch(checked = on, onCheckedChange = onLiveChange)
             }
-            if (live.phase == LivePhase.PLAYING || live.phase == LivePhase.STALLED) {
+            if (live.phase == StreamPhase.PLAYING || live.phase == StreamPhase.STALLED) {
                 Text(
                     "폰 버퍼 ${live.backlogMs} ms · ${live.kbps} kbps\n끊김 ${live.underruns}회 · 재동기화 ${live.resyncs}회 (버림 ${live.droppedMs} ms)",
                     style = MaterialTheme.typography.bodySmall,

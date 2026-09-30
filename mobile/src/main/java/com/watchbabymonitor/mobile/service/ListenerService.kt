@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
-import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -22,6 +21,9 @@ import com.watchbabymonitor.mobile.audio.AudioPlayer
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
 import com.watchbabymonitor.shared.Pcm16
+import com.watchbabymonitor.shared.engine.ReceiverEngine
+import com.watchbabymonitor.shared.engine.StreamEnd
+import com.watchbabymonitor.shared.engine.WatchdogAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -38,12 +40,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 private val TAG = Constants.logTag("ListenerService")
 
 /**
- * 라이브 듣기: 워치에 `/control START` → 워치가 연 `/audio` 채널을 받아 AudioTrack 으로 재생.
+ * 라이브 듣기: 감지기에 스트리밍 요청 → 감지기가 연 `/audio` 채널을 받아 AudioTrack 으로 재생.
+ * 상태·통계·무데이터 판단·사용자 문구는 [Receiver.engine] 이 한다.
  * foreground(type=mediaPlayback) 라 앱을 닫아도 계속 들린다 (ADR 004).
  *
  * 시작 [start] 은 앱 화면에서만 (백그라운드 포그라운드 서비스 시작 제한), 정지 [stop].
@@ -111,73 +113,77 @@ class ListenerService : Service() {
     }
 
     private suspend fun runSession() {
-        LiveStatus.connecting()
-        var error: String? = null
-        var watchNodeId: String? = null
+        val engine = Receiver.engine
+        engine.sessionStarted()
+        var end = StreamEnd.USER_STOPPED
+        var detail: String? = null
+        var sensorNodeId: String? = null
         try {
             channelClient.registerChannelCallback(channelCallback).await()
 
             val node = Wearable.getNodeClient(this).connectedNodes.await().firstOrNull()
-                ?: throw LiveException("연결된 워치가 없어요")
-            watchNodeId = node.id
-            LiveStatus.update { it.copy(watchName = node.displayName) }
+            if (node == null) {
+                end = StreamEnd.NO_PEER
+                return
+            }
+            sensorNodeId = node.id
+            engine.peerFound(node.displayName)
 
             val opened = CompletableDeferred<ChannelClient.Channel>()
             channelOpened = opened
 
+            // TODO(refactor 6단계): STREAM_ON 으로 전환 (워치는 임시로 START 를 STREAM_ON 으로 해석)
             val reply = withTimeout(Constants.CONTROL_REQUEST_TIMEOUT_MS) {
                 messageClient.sendRequest(node.id, Constants.Paths.CONTROL, ControlCommand.Start.toBytes()).await()
             }.toString(Charsets.UTF_8)
             Log.i(TAG, "START -> $reply")
-            when (reply) {
-                Constants.CONTROL_REPLY_OK -> Unit
-                Constants.CONTROL_REPLY_NOT_MONITORING -> throw LiveException("워치에서 모니터링을 먼저 시작해 주세요")
-                else -> throw LiveException("워치 응답: $reply")
+            engine.onStreamOnReply(reply)?.let {
+                end = it
+                detail = reply
+                return
             }
 
             val channel = withTimeout(Constants.Stream.CHANNEL_OPEN_TIMEOUT_MS) { opened.await() }
             activeChannel = channel
-            play(channel)
-            if (!stopRequested) error = "워치에서 스트리밍이 끝났어요"
+            end = play(channel)
         } catch (e: TimeoutCancellationException) {
-            Log.w(TAG, "watch did not respond", e)
-            error = "워치 응답 없음"
+            Log.w(TAG, "sensor did not respond", e)
+            end = StreamEnd.NO_RESPONSE
         } catch (e: CancellationException) {
+            end = StreamEnd.USER_STOPPED
             throw e
-        } catch (e: LiveException) {
-            Log.w(TAG, "live session ended: ${e.message}")
-            error = e.message
         } catch (e: Exception) {
-            if (!stopRequested) {
+            if (stopRequested) {
+                end = StreamEnd.USER_STOPPED
+            } else {
                 Log.e(TAG, "live session failed", e)
-                error = "오류: ${e.message ?: e.javaClass.simpleName}"
+                end = StreamEnd.FAILED
+                detail = e.message ?: e.javaClass.simpleName
             }
         } finally {
-            withContext(NonCancellable) { cleanup(watchNodeId, error) }
+            withContext(NonCancellable) {
+                cleanup(sensorNodeId)
+                engine.sessionEnded(if (stopRequested) StreamEnd.USER_STOPPED else end, detail)
+            }
         }
     }
 
-    /** 채널이 닫히거나 끊길 때까지 재생. */
-    private suspend fun play(channel: ChannelClient.Channel) = withContext(Dispatchers.IO) {
+    /** 채널이 닫히거나 끊길 때까지 재생. 끝난 이유를 돌려준다. */
+    private suspend fun play(channel: ChannelClient.Channel): StreamEnd = withContext(Dispatchers.IO) {
+        val engine = Receiver.engine
         val input = channelClient.getInputStream(channel).await()
         val player = AudioPlayer()
-        // read 스레드와 watchdog 이 함께 접근
-        val lastDataAt = AtomicLong(SystemClock.elapsedRealtime())
+        engine.channelOpened()
         val disconnected = AtomicBoolean(false)
 
         // read 가 조용히 멈추는 경우 감지 (CLAUDE.md §8)
         val watchdog = launch {
             while (true) {
-                delay(WATCHDOG_INTERVAL_MS)
-                val idle = SystemClock.elapsedRealtime() - lastDataAt.get()
-                if (idle > Constants.Stream.DISCONNECT_TIMEOUT_MS) {
-                    Log.w(TAG, "no data for ${idle}ms, closing channel")
+                delay(ReceiverEngine.WATCHDOG_INTERVAL_MS)
+                if (engine.watchdog() == WatchdogAction.DISCONNECT) {
                     disconnected.set(true)
                     channelClient.close(channel)
                     break
-                }
-                if (idle > Constants.Stream.STALL_TIMEOUT_MS) {
-                    LiveStatus.update { it.copy(phase = LivePhase.STALLED) }
                 }
             }
         }
@@ -186,33 +192,12 @@ class ListenerService : Service() {
         try {
             input.use {
                 val buf = ByteArray(READ_BUFFER)
-                var windowStart = SystemClock.elapsedRealtime()
-                var windowBytes = 0L
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
-                    val now = SystemClock.elapsedRealtime()
-                    lastDataAt.set(now)
                     player.write(buf, n)
                     totalBytes += n
-                    windowBytes += n
-
-                    val elapsed = now - windowStart
-                    if (elapsed >= STATS_INTERVAL_MS) {
-                        val kbps = (windowBytes * 8 / elapsed).toInt()
-                        LiveStatus.update {
-                            it.copy(
-                                phase = LivePhase.PLAYING,
-                                backlogMs = player.backlogMs,
-                                kbps = kbps,
-                                underruns = player.underruns,
-                                droppedMs = Pcm16.bytesToMs(player.droppedBytes),
-                                resyncs = player.resyncs,
-                            )
-                        }
-                        windowStart = now
-                        windowBytes = 0
-                    }
+                    engine.onData(n) { player.stats() }
                 }
             }
         } catch (e: IOException) {
@@ -220,13 +205,14 @@ class ListenerService : Service() {
             if (!disconnected.get()) throw e
         } finally {
             watchdog.cancel()
-            Log.i(TAG, "played ${Pcm16.bytesToMs(totalBytes) / 1000}s, dropped ${Pcm16.bytesToMs(player.droppedBytes)}ms, resyncs=${player.resyncs}, underruns=${player.underruns}")
+            val st = player.stats()
+            Log.i(TAG, "played ${Pcm16.bytesToMs(totalBytes) / 1000}s, dropped ${st.droppedMs}ms, resyncs=${st.resyncs}, underruns=${st.underruns}")
             player.release()
         }
-        if (disconnected.get()) throw LiveException("연결 끊김 (${Constants.Stream.DISCONNECT_TIMEOUT_MS / 1000}초 동안 소리 없음)")
+        if (disconnected.get()) StreamEnd.DISCONNECTED else StreamEnd.SENSOR_ENDED
     }
 
-    private suspend fun cleanup(watchNodeId: String?, error: String?) {
+    private suspend fun cleanup(sensorNodeId: String?) {
         channelOpened = null
         activeChannel?.let {
             try {
@@ -236,10 +222,11 @@ class ListenerService : Service() {
             }
         }
         activeChannel = null
-        if (watchNodeId != null) {
+        if (sensorNodeId != null) {
             try {
                 withTimeout(STOP_TIMEOUT_MS) {
-                    messageClient.sendRequest(watchNodeId, Constants.Paths.CONTROL, ControlCommand.Stop.toBytes()).await()
+                    // TODO(refactor 6단계): STREAM_OFF 로 전환
+                    messageClient.sendRequest(sensorNodeId, Constants.Paths.CONTROL, ControlCommand.Stop.toBytes()).await()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "STOP not delivered", e)
@@ -250,7 +237,6 @@ class ListenerService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "unregisterChannelCallback failed", e)
         }
-        LiveStatus.stopped(error)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -288,15 +274,11 @@ class ListenerService : Service() {
             .build()
     }
 
-    private class LiveException(message: String) : Exception(message)
-
     companion object {
         private const val ACTION_STOP = "com.watchbabymonitor.mobile.action.STOP_LIVE"
         private const val CHANNEL_ID = "live"
         private const val NOTIFICATION_ID = 2
         private const val READ_BUFFER = 4096
-        private const val STATS_INTERVAL_MS = 500L
-        private const val WATCHDOG_INTERVAL_MS = 500L
         private const val STOP_TIMEOUT_MS = 2_000L
 
         fun start(context: Context) {
