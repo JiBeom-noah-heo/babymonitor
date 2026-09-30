@@ -149,6 +149,14 @@ object Constants {
         /** 마이크 입력이 이만큼 완전히 0 이면 "마이크 막힘" (통화 중 등). 실제 방 소리는 0 이 아님. */
         const val MIC_MUTED_DETECT_MS = 3_000
 
+        /**
+         * 원격(클라우드) 연결일 때 실제로 닿는지 PING 으로 확인하는 간격·제한시간·실패 기준.
+         * 폰이 완전히 오프라인이어도 CapabilityClient 가 "원격으로 닿음"이라고 보고하는 경우가 있었다 (Phase 5 실측).
+         */
+        const val REMOTE_PROBE_INTERVAL_MS = 30_000L
+        const val REMOTE_PROBE_TIMEOUT_MS = 10_000L
+        const val REMOTE_PROBE_FAILURES = 2
+
         /** 이 기기들이 앱을 설치했음을 알리는 CapabilityClient 이름 (res/values/wear.xml). */
         const val CAPABILITY = "watch_baby_monitor"
     }

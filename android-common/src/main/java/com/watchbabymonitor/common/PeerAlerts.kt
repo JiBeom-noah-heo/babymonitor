@@ -1,6 +1,8 @@
 package com.watchbabymonitor.common
 
 import android.content.Context
+import android.os.PowerManager
+import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.common.notification.PeerNotifications
 import com.watchbabymonitor.shared.DeviceStatus
 import com.watchbabymonitor.shared.Role
@@ -39,6 +41,28 @@ object PeerAlerts {
 
     fun onLink(context: Context, connected: Boolean) {
         dispatch(context, synchronized(monitor) { monitor.onLink(connected) }, null)
+        if (RoleStore.current(context) == Role.RECEIVER) {
+            if (connected) releaseAwake() else holdAwake(context)
+        }
+    }
+
+    // 끊김 유예 시간 동안만 CPU 를 깨워 둔다. 잠든 수신기(워치)에서 delay() 가 멈춰
+    // 끊김 알림이 연결 복구 때까지 밀렸음 (Phase 5 실측)
+    @Volatile
+    private var awake: PowerManager.WakeLock? = null
+
+    private fun holdAwake(context: Context) {
+        if (awake?.isHeld == true) return
+        val pm = context.applicationContext.getSystemService(PowerManager::class.java)
+        awake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WBM:DisconnectGrace").apply {
+            setReferenceCounted(false)
+            acquire(Constants.Link.DISCONNECT_GRACE_MS + TICK_MS)
+        }
+    }
+
+    private fun releaseAwake() {
+        awake?.let { if (it.isHeld) it.release() }
+        awake = null
     }
 
     fun onPeerStatus(context: Context, status: DeviceStatus) {

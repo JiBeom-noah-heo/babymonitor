@@ -42,6 +42,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.drop
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -145,7 +148,15 @@ class ListenerService : Service() {
                 }
                 attempt++
                 engine.reconnecting(attempt, wait, result.end)
-                delay(wait)
+                // 블루투스가 다시 붙으면 기다리지 않고 바로 재시도 (Phase 5: 30초 대기 때문에 복구가 1분 늦었음)
+                val linkBack = withTimeoutOrNull(wait) {
+                    LinkMonitor.state.drop(1).first { it.link == Link.NEARBY }
+                }
+                if (linkBack != null) {
+                    // 연결 직후엔 상대가 아직 준비 안 됐을 수 있다 → 실패해도 짧은 간격부터 다시
+                    Log.i(TAG, "link back (nearby), retry now")
+                    attempt = 0
+                }
             }
         } finally {
             withContext(NonCancellable) {

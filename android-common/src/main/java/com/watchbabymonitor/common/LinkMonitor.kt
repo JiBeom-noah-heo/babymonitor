@@ -4,7 +4,13 @@ import android.content.Context
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.Wearable
+import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.shared.Constants
+import com.watchbabymonitor.shared.ControlCommand
+import com.watchbabymonitor.shared.Role
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -53,6 +59,16 @@ object LinkMonitor {
     @Volatile
     private var started = false
 
+    // CapabilityClient 가 말하는 상태와 닿을 수 있는 노드. 원격일 땐 PING 으로 다시 확인한다
+    @Volatile
+    private var reportedLink = Link.UNKNOWN
+
+    @Volatile
+    private var nodes: Set<Node> = emptySet()
+
+    @Volatile
+    private var probeFailures = 0
+
     fun start(context: Context) {
         if (started) return
         started = true
@@ -69,6 +85,43 @@ object LinkMonitor {
                 .catch { e -> log.e("capability watch failed", e) }
                 .collect { nodes -> onNodes(app, nodes) }
         }
+        scope.launch { probeRemote(app) }
+    }
+
+    /**
+     * 수신기이고 원격 연결일 때만, 주기적으로 PING 을 보내 실제로 닿는지 확인.
+     * [Constants.Link.REMOTE_PROBE_FAILURES] 번 연속 실패하면 끊김으로, 다시 성공하면 원격으로.
+     */
+    private suspend fun probeRemote(context: Context) {
+        val control = ControlClient(context)
+        while (true) {
+            delay(Constants.Link.REMOTE_PROBE_INTERVAL_MS)
+            if (reportedLink != Link.REMOTE || RoleStore.current(context) != Role.RECEIVER) {
+                probeFailures = 0
+                continue
+            }
+            val node = nodes.firstOrNull() ?: continue
+            val ok = try {
+                control.send(node.id, ControlCommand.Ping, Constants.Link.REMOTE_PROBE_TIMEOUT_MS) == Constants.CONTROL_REPLY_PONG
+            } catch (e: CancellationException) {
+                if (e is TimeoutCancellationException) false else throw e
+            } catch (e: Exception) {
+                false
+            }
+            if (ok) {
+                if (probeFailures >= Constants.Link.REMOTE_PROBE_FAILURES) {
+                    log.i("remote probe ok again")
+                    setLink(context, Link.REMOTE, node.displayName)
+                }
+                probeFailures = 0
+            } else {
+                probeFailures++
+                log.w("remote probe failed ($probeFailures)")
+                if (probeFailures == Constants.Link.REMOTE_PROBE_FAILURES && reportedLink == Link.REMOTE) {
+                    setLink(context, Link.DISCONNECTED, node.displayName)
+                }
+            }
+        }
     }
 
     /** 닿을 수 있는 상대 노드 목록이 바뀔 때. */
@@ -78,11 +131,18 @@ object LinkMonitor {
             nodes.any { it.isNearby } -> Link.NEARBY
             else -> Link.REMOTE
         }
-        val name = nodes.firstOrNull()?.displayName ?: _state.value.peerName
-        if (link != _state.value.link) {
-            log.i("link ${_state.value.link} -> $link (${nodes.size} nodes)")
-            _state.value = LinkState(link = link, peerName = name)
-            PeerAlerts.onLink(context, connected = link != Link.DISCONNECTED)
-        }
+        this.nodes = nodes
+        if (link != reportedLink) probeFailures = 0
+        reportedLink = link
+        // 원격인데 PING 이 계속 실패 중이면 끊김 유지 (CapabilityClient 의 "닿음" 보고를 믿지 않음)
+        if (link == Link.REMOTE && probeFailures >= Constants.Link.REMOTE_PROBE_FAILURES) return
+        setLink(context, link, nodes.firstOrNull()?.displayName, nodes.size)
+    }
+
+    private fun setLink(context: Context, link: Link, name: String?, nodeCount: Int? = null) {
+        if (link == _state.value.link) return
+        log.i("link ${_state.value.link} -> $link${nodeCount?.let { " ($it nodes)" } ?: " (probe)"}")
+        _state.value = LinkState(link = link, peerName = name ?: _state.value.peerName)
+        PeerAlerts.onLink(context, connected = link != Link.DISCONNECTED)
     }
 }
