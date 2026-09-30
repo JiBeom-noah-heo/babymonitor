@@ -66,11 +66,17 @@ object PeerAlerts {
     }
 
     fun onPeerStatus(context: Context, status: DeviceStatus) {
-        dispatch(context, synchronized(monitor) { monitor.onPeerStatus(status) }, status.batteryPercent)
+        dispatch(context, synchronized(monitor) { monitor.onPeerStatus(status) }, status.batteryPercent, status.error)
+        SilenceAlarm.onPeerStatus(context, status)
     }
 
-    private fun dispatch(context: Context, events: List<PeerEvent>, battery: Int?) {
+    /** 수신기가 원격으로 STOP 을 보내기 직전. 곧 올 "모니터링 꺼짐" 은 알리지 않는다. */
+    fun expectStop() {
+        synchronized(monitor) { monitor.expectStop() }
+    }
+
+    private fun dispatch(context: Context, events: List<PeerEvent>, battery: Int?, detail: String? = null) {
         if (events.isEmpty() || RoleStore.current(context) != Role.RECEIVER) return
-        events.forEach { PeerNotifications.show(context, it, battery) }
+        events.forEach { PeerNotifications.show(context, it, battery, if (it == PeerEvent.SENSOR_STOPPED) detail else null) }
     }
 }

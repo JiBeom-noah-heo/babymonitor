@@ -21,6 +21,12 @@ enum class PeerEvent {
 
     /** 감지기 마이크가 다시 들림. */
     MIC_BACK,
+
+    /** 감지기 모니터링이 꺼짐 (사용자가 감지기에서 끔 / 오류). 수신기가 원격으로 끈 직후는 제외. */
+    SENSOR_STOPPED,
+
+    /** 모니터링 중이던 감지기에서 [Constants.Link.SENSOR_SILENT_MS] 넘게 소식 없음 (재부팅·강제 종료 등). */
+    SENSOR_SILENT,
 }
 
 /**
@@ -31,13 +37,18 @@ enum class PeerEvent {
  *
  * 한 코루틴(또는 동기화된 호출)에서만 쓴다.
  */
-class PeerMonitor(private val clock: Clock = Clock.MONOTONIC) {
+class PeerMonitor(
+    private val clock: Clock = Clock.MONOTONIC,
+    private val wallClock: Clock = Clock.WALL,
+) {
 
     private var disconnectedSince: Long? = null
     private var disconnectNotified = false
     private var lowBatteryArmed = true
     private var micMuted = false
     private var lastTs = Long.MIN_VALUE
+    private var sensorMonitoring = false
+    private var expectedStopAt: Long? = null
 
     /** 연결 상태가 바뀔 때 (CapabilityClient 등). */
     fun onLink(connected: Boolean): List<PeerEvent> {
@@ -84,6 +95,27 @@ class PeerMonitor(private val clock: Clock = Clock.MONOTONIC) {
             micMuted = status.micMuted
             events += if (micMuted) PeerEvent.MIC_MUTED else PeerEvent.MIC_BACK
         }
+        if (sensorMonitoring && !status.monitoring) {
+            val expected = expectedStopAt?.let { wallClock.nowMs() - it < Constants.Link.EXPECTED_STOP_WINDOW_MS } ?: false
+            if (!expected) events += PeerEvent.SENSOR_STOPPED
+            expectedStopAt = null
+        }
+        sensorMonitoring = status.monitoring
         return events
+    }
+
+    /** 수신기가 원격으로 STOP 을 보냄 → 곧 올 "모니터링 꺼짐" 은 알리지 않는다. */
+    fun expectStop() {
+        expectedStopAt = wallClock.nowMs()
+    }
+
+    companion object {
+        /**
+         * 마지막으로 받은 감지기 상태로 "소식 없음"인지 (알람 리시버에서 쓰는 상태 없는 판단).
+         * 모니터링 중이던 감지기의 상태가 [Constants.Link.SENSOR_SILENT_MS] 넘게 새로 오지 않으면 true.
+         */
+        fun isSilent(status: DeviceStatus?, nowWallMs: Long): Boolean =
+            status != null && status.role == Role.SENSOR && status.monitoring &&
+                nowWallMs - status.ts > Constants.Link.SENSOR_SILENT_MS
     }
 }

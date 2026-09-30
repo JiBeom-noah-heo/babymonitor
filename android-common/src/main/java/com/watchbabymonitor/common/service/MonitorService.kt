@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -68,6 +69,13 @@ class MonitorService : Service() {
 
         acquireWakeLock()
         monitorJob = scope.launch { monitor() }
+        // 12시간 상한이면 밤새 쓰다 CPU 가 잠들 수 있었음 → 짧은 상한을 주기적으로 갱신
+        scope.launch {
+            while (true) {
+                delay(WAKELOCK_RENEW_MS)
+                acquireWakeLock()
+            }
+        }
         // 프로세스가 죽은 뒤 자동 재시작하면 백그라운드 마이크 시작 제한에 걸리므로 NOT_STICKY
         return START_NOT_STICKY
     }
@@ -96,12 +104,16 @@ class MonitorService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * 모니터링 중 CPU 유지. 상한 [WAKELOCK_TIMEOUT_MS] 를 [WAKELOCK_RENEW_MS] 마다 다시 잡는다
+     * (reference count 없음 → 다시 잡으면 상한이 늘어남). 서비스가 비정상으로 죽어도 최대 1시간 안에 풀린다.
+     */
     private fun acquireWakeLock() {
-        val pm = getSystemService(PowerManager::class.java)
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WBM:Monitor").apply {
-            setReferenceCounted(false)
-            acquire(WAKELOCK_TIMEOUT_MS)
-        }
+        val lock = wakeLock ?: getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WBM:Monitor")
+            .apply { setReferenceCounted(false) }
+            .also { wakeLock = it }
+        lock.acquire(WAKELOCK_TIMEOUT_MS)
     }
 
     private fun ensureChannel() {
@@ -130,8 +142,11 @@ class MonitorService : Service() {
         private const val CHANNEL_ID = "monitor"
         private const val NOTIFICATION_ID = 1
 
-        /** 정지를 못 받아도 WakeLock 이 영원히 잡히지 않게 하는 상한. */
-        private const val WAKELOCK_TIMEOUT_MS = 12 * 60 * 60 * 1000L
+        /** WakeLock 상한. 갱신이 멈추면(서비스 비정상 종료 등) 이 시간 안에 풀린다. */
+        private const val WAKELOCK_TIMEOUT_MS = 60 * 60 * 1000L
+
+        /** 상한보다 충분히 짧게 갱신. */
+        private const val WAKELOCK_RENEW_MS = 30 * 60 * 1000L
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, MonitorService::class.java))

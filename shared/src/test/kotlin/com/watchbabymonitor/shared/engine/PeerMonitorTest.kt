@@ -4,6 +4,7 @@ import com.watchbabymonitor.shared.Clock
 import com.watchbabymonitor.shared.DeviceStatus
 import com.watchbabymonitor.shared.Role
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,11 +15,12 @@ class PeerMonitorTest {
     }
 
     private val clock = FakeClock()
-    private val m = PeerMonitor(clock)
+    private val wall = FakeClock(1_000_000)
+    private val m = PeerMonitor(clock, wall)
     private var ts = 0L
 
-    private fun sensor(battery: Int? = 80, muted: Boolean = false) =
-        DeviceStatus(role = Role.SENSOR, monitoring = true, batteryPercent = battery, micMuted = muted, ts = ++ts)
+    private fun sensor(battery: Int? = 80, muted: Boolean = false, monitoring: Boolean = true) =
+        DeviceStatus(role = Role.SENSOR, monitoring = monitoring, batteryPercent = battery, micMuted = muted, ts = ++ts)
 
     @Test
     fun shortDisconnect_isNotReported() {
@@ -78,6 +80,49 @@ class PeerMonitorTest {
         assertEquals(listOf(PeerEvent.LOW_BATTERY), m.onPeerStatus(s))
         m.onPeerStatus(sensor(battery = 90)) // 재준비
         assertTrue("같은 ts 로 다시 와도 무시", m.onPeerStatus(s).isEmpty())
+    }
+
+    @Test
+    fun monitoringTurnedOff_reportsSensorStopped_once() {
+        m.onPeerStatus(sensor(monitoring = true))
+        assertEquals(listOf(PeerEvent.SENSOR_STOPPED), m.onPeerStatus(sensor(monitoring = false)))
+        assertTrue(m.onPeerStatus(sensor(monitoring = false)).isEmpty())
+    }
+
+    @Test
+    fun monitoringNeverOn_noStoppedEvent() {
+        assertTrue(m.onPeerStatus(sensor(monitoring = false)).isEmpty())
+    }
+
+    @Test
+    fun remoteStopByReceiver_isNotReported() {
+        m.onPeerStatus(sensor(monitoring = true))
+        m.expectStop()
+        wall.t += 5_000
+        assertTrue(m.onPeerStatus(sensor(monitoring = false)).isEmpty())
+        // 다음번 꺼짐은 다시 알림
+        m.onPeerStatus(sensor(monitoring = true))
+        assertEquals(listOf(PeerEvent.SENSOR_STOPPED), m.onPeerStatus(sensor(monitoring = false)))
+    }
+
+    @Test
+    fun oldExpectedStop_doesNotSuppress() {
+        m.onPeerStatus(sensor(monitoring = true))
+        m.expectStop()
+        wall.t += 60_000
+        assertEquals(listOf(PeerEvent.SENSOR_STOPPED), m.onPeerStatus(sensor(monitoring = false)))
+    }
+
+    @Test
+    fun isSilent_onlyForMonitoringSensor_afterThreshold() {
+        val now = 10_000_000L
+        val fresh = DeviceStatus(role = Role.SENSOR, monitoring = true, ts = now - 11 * 60_000)
+        val stale = DeviceStatus(role = Role.SENSOR, monitoring = true, ts = now - 13 * 60_000)
+        assertFalse(PeerMonitor.isSilent(fresh, now))
+        assertTrue(PeerMonitor.isSilent(stale, now))
+        assertFalse("꺼진 감지기는 조용해도 정상", PeerMonitor.isSilent(stale.copy(monitoring = false), now))
+        assertFalse(PeerMonitor.isSilent(stale.copy(role = Role.RECEIVER), now))
+        assertFalse(PeerMonitor.isSilent(null, now))
     }
 
     @Test

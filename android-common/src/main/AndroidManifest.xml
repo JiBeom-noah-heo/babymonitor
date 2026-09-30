@@ -52,6 +52,11 @@
             </intent-filter>
         </service>
 
+        <!-- 수신기: 감지기가 말없이 멈췄는지 확인하는 알람 (재부팅·강제 종료) -->
+        <receiver
+            android:name="com.watchbabymonitor.common.SilenceCheckReceiver"
+            android:exported="false" />
+
         <!-- 감지기: 화면이 꺼져도 마이크 측정 유지 (CLAUDE.md §4-5) -->
         <service
             android:name="com.watchbabymonitor.common.service.MonitorService"

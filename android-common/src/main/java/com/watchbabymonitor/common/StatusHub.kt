@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.BatteryManager
 import com.watchbabymonitor.common.datalayer.StatusSync
 import com.watchbabymonitor.common.history.HistoryRecorder
+import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DeviceStatus
 import com.watchbabymonitor.shared.Role
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -48,6 +50,15 @@ object StatusHub {
         PeerAlerts.start(app)
         HistoryRecorder.start(app)
 
+        // 감지기 생존 신호: 모니터링 중이면 5분마다 /status 를 다시 올린다 → 수신기의 "소식 없음" 판단 기준.
+        // 모니터링 중엔 WakeLock 이 잡혀 있어 delay 가 멈추지 않는다
+        scope.launch {
+            while (true) {
+                delay(Constants.Link.SENSOR_HEARTBEAT_MS)
+                if (RoleStore.current(app) == Role.SENSOR && Engines.sensor.state.value.running) heartbeat.value++
+            }
+        }
+
         // 저장된 감지 설정을 엔진에, 엔진에서 바뀐 설정(원격 SET_* 포함)은 저장 (Phase 6)
         Engines.sensor.setConfig(RoleStore.config(app).value)
         scope.launch {
@@ -61,10 +72,11 @@ object StatusHub {
                 Engines.sensor.state,
                 Engines.receiver.state,
                 BatteryLog.percent,
-            ) { role, sensor, receiver, battery ->
+                heartbeat,
+            ) { role, sensor, receiver, battery, beat ->
                 when (role) {
-                    Role.SENSOR -> Snapshot(role, sensor.running, sensor.streaming, sensor.micMuted, battery, sensor.error, sensor.config)
-                    Role.RECEIVER -> Snapshot(role, false, receiver.phase != StreamPhase.IDLE, false, battery, receiver.error, null)
+                    Role.SENSOR -> Snapshot(role, sensor.running, sensor.streaming, sensor.micMuted, battery, sensor.error, sensor.config, beat)
+                    Role.RECEIVER -> Snapshot(role, false, receiver.phase != StreamPhase.IDLE, false, battery, receiver.error, null, 0)
                 }
             }.distinctUntilChanged().collect { snap ->
                 val status = DeviceStatus(
@@ -124,7 +136,11 @@ object StatusHub {
         val battery: Int?,
         val error: String?,
         val config: DetectionConfig?,
+        /** 바뀌면 다시 올리도록 하는 생존 신호 번호. */
+        val heartbeat: Long,
     )
+
+    private val heartbeat = MutableStateFlow(0L)
 
     private fun batteryPercent(context: Context): Int? =
         context.getSystemService(BatteryManager::class.java)

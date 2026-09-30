@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Node
 import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.common.LinkMonitor
+import com.watchbabymonitor.common.PeerAlerts
 import com.watchbabymonitor.common.LinkState
 import com.watchbabymonitor.common.ReceiverPrefs
 import com.watchbabymonitor.common.RoleControl
@@ -138,6 +139,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun remoteMonitoring(start: Boolean) {
         viewModelScope.launch {
             val cmd = if (start) ControlCommand.Start else ControlCommand.Stop
+            if (!start) PeerAlerts.expectStop()
             try {
                 val node = control.connectedNodes().firstOrNull()
                 if (node == null) {

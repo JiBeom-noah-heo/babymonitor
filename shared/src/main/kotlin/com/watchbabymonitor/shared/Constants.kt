@@ -157,6 +157,18 @@ object Constants {
         const val REMOTE_PROBE_TIMEOUT_MS = 10_000L
         const val REMOTE_PROBE_FAILURES = 2
 
+        /**
+         * 감지기는 모니터링 중 이 간격으로 /status 를 다시 올린다 (생존 신호).
+         * 재부팅·강제 종료처럼 말없이 멈추면 올라오지 않는다.
+         */
+        const val SENSOR_HEARTBEAT_MS = 5 * 60_000L
+
+        /** 모니터링 중인 감지기의 /status 가 이만큼 새로 오지 않으면 "소식 없음" (생존 신호 2번 놓침 + 여유). */
+        const val SENSOR_SILENT_MS = 12 * 60_000L
+
+        /** 수신기가 원격으로 STOP 을 보낸 직후 "모니터링 꺼짐" 알림은 사용자가 한 일이라 생략. */
+        const val EXPECTED_STOP_WINDOW_MS = 30_000L
+
         /** 이 기기들이 앱을 설치했음을 알리는 CapabilityClient 이름 (res/values/wear.xml). */
         const val CAPABILITY = "watch_baby_monitor"
     }
