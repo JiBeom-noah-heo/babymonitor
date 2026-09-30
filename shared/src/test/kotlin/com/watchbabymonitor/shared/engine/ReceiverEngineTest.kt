@@ -128,4 +128,14 @@ class ReceiverEngineTest {
         assertEquals(AlertAction.IGNORE_DUPLICATE, engine.onAlert(a, DeviceKind.PHONE))
         assertEquals(AlertAction.VIBRATE, engine.onAlert(a.copy(ts = 2L), DeviceKind.WATCH))
     }
+
+    @Test
+    fun onAlert_recordsCountAndLast_keptAcrossSessions() {
+        engine.onAlert(NoiseAlert(level = -20f, ts = 1L), DeviceKind.WATCH)
+        engine.onAlert(NoiseAlert(level = -12f, ts = 2L), DeviceKind.WATCH)
+        engine.onAlert(NoiseAlert(level = -12f, ts = 2L), DeviceKind.WATCH) // 중복
+        engine.sessionStarted()
+        assertEquals(2, engine.state.value.alertCount)
+        assertEquals(-12f, engine.state.value.lastAlert!!.level, 0f)
+    }
 }

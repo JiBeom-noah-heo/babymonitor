@@ -47,6 +47,9 @@ data class ReceiverState(
     val resyncs: Int = 0,
     /** 마지막 세션이 오류로 끝났으면 사용자 문구. */
     val error: String? = null,
+    /** 받은 알림 (중복 제외). 수신기 화면 표시용. */
+    val alertCount: Int = 0,
+    val lastAlert: NoiseAlert? = null,
 )
 
 /** 재생기(AudioTrack 래퍼)가 알려주는 현재 수치. */
@@ -111,7 +114,10 @@ class ReceiverEngine(
     // ---- 라이브 듣기 세션 ----
 
     fun sessionStarted() {
-        _state.value = ReceiverState(phase = StreamPhase.CONNECTING)
+        // 스트림 통계만 초기화, 알림 기록은 유지
+        _state.update {
+            ReceiverState(phase = StreamPhase.CONNECTING, alertCount = it.alertCount, lastAlert = it.lastAlert)
+        }
     }
 
     fun peerFound(name: String) {
@@ -188,6 +194,7 @@ class ReceiverEngine(
     fun onAlert(alert: NoiseAlert, device: DeviceKind): AlertAction {
         if (alert == lastAlert) return AlertAction.IGNORE_DUPLICATE
         lastAlert = alert
+        _state.update { it.copy(alertCount = it.alertCount + 1, lastAlert = alert) }
         _alerts.tryEmit(alert)
         return when (device) {
             DeviceKind.PHONE -> AlertAction.NOTIFY_HEADS_UP

@@ -11,6 +11,7 @@ import com.watchbabymonitor.common.DeviceInfo
 import com.watchbabymonitor.common.Engines
 import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.notification.NoiseNotifications
+import com.watchbabymonitor.common.notification.WatchAlert
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
 import com.watchbabymonitor.shared.NoiseAlert
@@ -78,7 +79,8 @@ class DataLayerListenerService : WearableListenerService() {
         }
         Log.i(TAG, "alert level=${alert.level} ts=${alert.ts} from=${event.sourceNodeId}")
         when (Engines.receiver.onAlert(alert, DeviceInfo.kind(this))) {
-            AlertAction.NOTIFY_HEADS_UP, AlertAction.VIBRATE -> NoiseNotifications.show(this, alert)
+            AlertAction.NOTIFY_HEADS_UP -> NoiseNotifications.show(this, alert)
+            AlertAction.VIBRATE -> WatchAlert.show(this, alert)
             AlertAction.IGNORE_DUPLICATE -> Log.i(TAG, "duplicate alert ignored ts=${alert.ts}")
         }
     }

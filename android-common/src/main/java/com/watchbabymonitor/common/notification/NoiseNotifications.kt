@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
 
 private val TAG = Constants.logTag("NoiseNotifications")
 
-/** 폰 "소음 감지" 알림 채널과 알림. */
+/** 수신기 "소음 감지" 알림 채널과 알림 (폰은 heads-up, 워치는 [WatchAlert] 가 진동과 함께). */
 object NoiseNotifications {
     private const val CHANNEL_ID = "noise_alert"
     private const val NOTIFICATION_ID = 100
@@ -30,7 +30,7 @@ object NoiseNotifications {
     /** heads-up 이 뜨도록 IMPORTANCE_HIGH. 앱 시작 시 한 번 호출. */
     fun ensureChannel(context: Context) {
         val channel = NotificationChannel(CHANNEL_ID, "소음 감지", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "워치 주변에서 큰 소리가 계속될 때 알림"
+            description = "아기 옆 감지기에서 큰 소리가 계속될 때 알림"
             enableVibration(true)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
