@@ -18,12 +18,17 @@ object RoleStore {
     private const val KEY_ROLE = "role"
     private const val KEY_PRESET = "preset" // Phase 3.5~5, 읽기만 (config 로 이전)
     private const val KEY_CONFIG = "config"
+    private const val KEY_AUTO_LISTEN = "auto_listen"
+    private const val KEY_ALLOW_REMOTE_LIVE = "allow_remote_live"
 
     @Volatile
     private var roleFlow: MutableStateFlow<Role>? = null
 
     @Volatile
     private var configFlow: MutableStateFlow<DetectionConfig>? = null
+
+    @Volatile
+    private var receiverFlow: MutableStateFlow<ReceiverPrefs>? = null
 
     fun role(context: Context): StateFlow<Role> = roleState(context)
 
@@ -42,6 +47,27 @@ object RoleStore {
         prefs(context).edit().putString(KEY_CONFIG, WbmJson.encodeToString(DetectionConfig.serializer(), config)).apply()
         configState(context).value = config
     }
+
+    /** 수신기 설정 (Phase 6). */
+    fun receiverPrefs(context: Context): StateFlow<ReceiverPrefs> = receiverState(context)
+
+    fun setReceiverPrefs(context: Context, prefs: ReceiverPrefs) {
+        prefs(context).edit()
+            .putBoolean(KEY_AUTO_LISTEN, prefs.autoListen)
+            .putBoolean(KEY_ALLOW_REMOTE_LIVE, prefs.allowRemoteLive)
+            .apply()
+        receiverState(context).value = prefs
+    }
+
+    private fun receiverState(context: Context): MutableStateFlow<ReceiverPrefs> =
+        receiverFlow ?: synchronized(this) {
+            receiverFlow ?: MutableStateFlow(
+                ReceiverPrefs(
+                    autoListen = prefs(context).getBoolean(KEY_AUTO_LISTEN, false),
+                    allowRemoteLive = prefs(context).getBoolean(KEY_ALLOW_REMOTE_LIVE, false),
+                ),
+            ).also { receiverFlow = it }
+        }
 
     fun defaultRole(context: Context): Role = when (DeviceInfo.kind(context)) {
         DeviceKind.WATCH -> Role.DEFAULT_WATCH
@@ -78,3 +104,11 @@ object RoleStore {
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
+
+/**
+ * 수신기 설정 (Phase 6 설정 화면).
+ * @property autoListen 알림이 오면 라이브 듣기 자동 시작. 앱이 화면에 있을 때만 바로 시작되고,
+ *   아니면 알림의 "듣기" 버튼 (백그라운드 재생 FGS 시작 제한)
+ * @property allowRemoteLive 원격(클라우드) 연결에서도 라이브 듣기. 아이 소리가 구글 서버를 거치므로 기본 꺼짐 (CLAUDE.md §8)
+ */
+data class ReceiverPrefs(val autoListen: Boolean = false, val allowRemoteLive: Boolean = false)

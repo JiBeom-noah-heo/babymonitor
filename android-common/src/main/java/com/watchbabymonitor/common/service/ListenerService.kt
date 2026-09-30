@@ -20,6 +20,7 @@ import com.watchbabymonitor.common.DeviceInfo
 import com.watchbabymonitor.common.Engines
 import com.watchbabymonitor.common.Link
 import com.watchbabymonitor.common.LinkMonitor
+import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.audio.AudioPlayer
 import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.shared.Constants
@@ -175,6 +176,10 @@ class ListenerService : Service() {
         try {
             channelClient.registerChannelCallback(channelCallback).await()
 
+            // 원격(클라우드) 라이브 듣기는 설정에서 허용했을 때만 (CLAUDE.md §8)
+            if (LinkMonitor.state.value.link == Link.REMOTE && !RoleStore.receiverPrefs(this).value.allowRemoteLive) {
+                return SessionResult(StreamEnd.REMOTE_NOT_ALLOWED)
+            }
             val node = control.connectedNodes().firstOrNull() ?: return SessionResult(StreamEnd.NO_PEER)
             sensorNodeId = node.id
             engine.peerFound(node.displayName)

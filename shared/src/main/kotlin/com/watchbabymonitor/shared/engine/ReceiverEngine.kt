@@ -33,6 +33,9 @@ enum class StreamEnd {
     SENSOR_ENDED,
     DISCONNECTED,
     FAILED,
+
+    /** 원격(클라우드) 연결인데 설정에서 원격 라이브 듣기를 허용하지 않음 (CLAUDE.md §8, Phase 6). */
+    REMOTE_NOT_ALLOWED,
 }
 
 data class ReceiverState(
@@ -241,7 +244,8 @@ class ReceiverEngine(
             val retryable = when (end) {
                 StreamEnd.SENSOR_ENDED, StreamEnd.DISCONNECTED, StreamEnd.NO_RESPONSE,
                 StreamEnd.NO_PEER, StreamEnd.FAILED -> true
-                StreamEnd.USER_STOPPED, StreamEnd.SENSOR_NOT_MONITORING, StreamEnd.REJECTED -> false
+                StreamEnd.USER_STOPPED, StreamEnd.SENSOR_NOT_MONITORING, StreamEnd.REJECTED,
+                StreamEnd.REMOTE_NOT_ALLOWED -> false
             }
             if (!retryable || sinceFirstFailureMs >= Constants.Stream.RECONNECT_GIVE_UP_MS) return null
             val backoff = Constants.Stream.RECONNECT_FIRST_DELAY_MS shl attempt.coerceAtMost(10)
@@ -271,6 +275,7 @@ class ReceiverEngine(
             StreamEnd.SENSOR_ENDED -> "${peer}에서 스트리밍이 끝났어요"
             StreamEnd.DISCONNECTED -> "연결 끊김 (${Constants.Stream.DISCONNECT_TIMEOUT_MS / 1000}초 동안 소리 없음)"
             StreamEnd.FAILED -> "오류: $detail"
+            StreamEnd.REMOTE_NOT_ALLOWED -> "원격(클라우드) 연결이에요. 설정에서 허용하면 들을 수 있어요"
         }
     }
 }

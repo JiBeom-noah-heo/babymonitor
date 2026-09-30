@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.watchbabymonitor.common.DeviceInfo
+import com.watchbabymonitor.common.service.ListenerService
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
 import java.text.SimpleDateFormat
@@ -64,6 +65,11 @@ object NoiseNotifications {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(openApp)
+            // 사용자가 누른 알림 버튼에서는 재생 FGS 를 시작할 수 있다 (자동 듣기의 백그라운드 대안, Phase 6)
+            .addAction(0, "듣기", PendingIntent.getForegroundService(
+                context, 3, Intent(context, ListenerService::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ))
             .build()
 
         // 같은 ID 로 갱신해도 매번 소리·진동이 나도록 onlyAlertOnce 는 쓰지 않음

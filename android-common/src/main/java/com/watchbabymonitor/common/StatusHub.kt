@@ -3,6 +3,7 @@ package com.watchbabymonitor.common
 import android.content.Context
 import android.os.BatteryManager
 import com.watchbabymonitor.common.datalayer.StatusSync
+import com.watchbabymonitor.common.history.HistoryRecorder
 import com.watchbabymonitor.shared.DetectionConfig
 import com.watchbabymonitor.shared.DeviceStatus
 import com.watchbabymonitor.shared.Role
@@ -45,6 +46,7 @@ object StatusHub {
         BatteryLog.start(app)
         LinkMonitor.start(app)
         PeerAlerts.start(app)
+        HistoryRecorder.start(app)
 
         // 저장된 감지 설정을 엔진에, 엔진에서 바뀐 설정(원격 SET_* 포함)은 저장 (Phase 6)
         Engines.sensor.setConfig(RoleStore.config(app).value)

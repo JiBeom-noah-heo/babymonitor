@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ksp)
 }
 
 // 두 앱(mobile, wear)이 함께 쓰는 Android 어댑터: 마이크, 채널 송신, 재생, Data Layer (ADR 005).
@@ -28,4 +29,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
+
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 }

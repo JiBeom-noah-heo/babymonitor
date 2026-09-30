@@ -16,6 +16,7 @@ import com.watchbabymonitor.common.Engines
 import com.watchbabymonitor.common.LinkMonitor
 import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.StatusHub
+import com.watchbabymonitor.common.history.HistoryRecorder
 import com.watchbabymonitor.common.notification.NoiseNotifications
 import com.watchbabymonitor.common.notification.WatchAlert
 import com.watchbabymonitor.shared.Constants
@@ -24,6 +25,7 @@ import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.shared.Role
 import com.watchbabymonitor.shared.engine.AlertAction
 import com.watchbabymonitor.shared.engine.ControlEffect
+import com.watchbabymonitor.shared.engine.StreamPhase
 
 private val TAG = Constants.logTag("DataLayerListener")
 
@@ -110,7 +112,19 @@ class DataLayerListenerService : WearableListenerService() {
         when (Engines.receiver.onAlert(alert, DeviceInfo.kind(this))) {
             AlertAction.NOTIFY_HEADS_UP -> NoiseNotifications.show(this, alert)
             AlertAction.VIBRATE -> WatchAlert.show(this, alert)
-            AlertAction.IGNORE_DUPLICATE -> Log.i(TAG, "duplicate alert ignored ts=${alert.ts}")
+            AlertAction.IGNORE_DUPLICATE -> {
+                Log.i(TAG, "duplicate alert ignored ts=${alert.ts}")
+                return
+            }
+        }
+        HistoryRecorder.recordReceived(this, alert, LinkMonitor.state.value.peerName)
+
+        // 자동 듣기: 앱이 화면에 있을 때만 바로 시작 (백그라운드면 알림의 "듣기" 버튼으로)
+        if (RoleStore.receiverPrefs(this).value.autoListen && isAppVisible() &&
+            Engines.receiver.state.value.phase == StreamPhase.IDLE
+        ) {
+            Log.i(TAG, "auto listen on alert")
+            ListenerService.start(this)
         }
     }
 

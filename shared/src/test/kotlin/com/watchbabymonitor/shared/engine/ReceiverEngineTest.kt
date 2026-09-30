@@ -112,6 +112,10 @@ class ReceiverEngineTest {
         assertEquals("오류: boom", ReceiverEngine.messageFor(StreamEnd.FAILED, "boom", "w"))
         assertEquals("w 응답 없음", ReceiverEngine.messageFor(StreamEnd.NO_RESPONSE, null, "w"))
         assertEquals("w에서 스트리밍이 끝났어요", ReceiverEngine.messageFor(StreamEnd.SENSOR_ENDED, null, "w"))
+        assertEquals(
+            "원격(클라우드) 연결이에요. 설정에서 허용하면 들을 수 있어요",
+            ReceiverEngine.messageFor(StreamEnd.REMOTE_NOT_ALLOWED, null, "w"),
+        )
     }
 
     @Test
@@ -125,6 +129,7 @@ class ReceiverEngineTest {
         assertNull(ReceiverEngine.retryDelayMs(StreamEnd.USER_STOPPED, 0, 0))
         assertNull(ReceiverEngine.retryDelayMs(StreamEnd.SENSOR_NOT_MONITORING, 0, 0))
         assertNull(ReceiverEngine.retryDelayMs(StreamEnd.REJECTED, 0, 0))
+        assertNull(ReceiverEngine.retryDelayMs(StreamEnd.REMOTE_NOT_ALLOWED, 0, 0))
         assertEquals(2_000L, ReceiverEngine.retryDelayMs(StreamEnd.SENSOR_ENDED, 0, 0))
         assertEquals(2_000L, ReceiverEngine.retryDelayMs(StreamEnd.NO_RESPONSE, 0, 0))
         assertNull(ReceiverEngine.retryDelayMs(StreamEnd.DISCONNECTED, 3, Constants.Stream.RECONNECT_GIVE_UP_MS))
