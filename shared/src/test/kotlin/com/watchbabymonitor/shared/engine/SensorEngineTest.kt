@@ -3,6 +3,7 @@ package com.watchbabymonitor.shared.engine
 import com.watchbabymonitor.shared.Clock
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
+import com.watchbabymonitor.shared.DetectionPreset
 import com.watchbabymonitor.shared.NoiseAlert
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -279,6 +280,55 @@ class SensorEngineTest {
         runCurrent()
         assertEquals(-10f, e.state.value.thresholdDbfs, 0f)
         assertTrue(alerts.sent.isEmpty())
+    }
+
+    // ---- 프리셋 ----
+
+    @Test
+    fun carPreset_ignoresNoiseThatHomeWouldAlertOn() = runTest {
+        // -30 dBFS 가 1.5초: 집 안(-35)이면 알림, 차 안(-25)이면 무시
+        val mid = ShortArray(Constants.Audio.SAMPLES_PER_WINDOW) { 1036 } // 약 -30 dBFS
+        val home = FakeAlerts()
+        engine().run(flow { repeat(15) { emit(mid) } }, home, FakeStreams(), DetectionPreset.HOME)
+        val car = FakeAlerts()
+        engine().run(flow { repeat(15) { emit(mid) } }, car, FakeStreams(), DetectionPreset.CAR)
+        assertEquals(1, home.sent.size)
+        assertTrue(car.sent.isEmpty())
+    }
+
+    @Test
+    fun carPreset_needsLongerSustain() = runTest {
+        val alerts = FakeAlerts()
+        val louder = ShortArray(Constants.Audio.SAMPLES_PER_WINDOW) { 16384 } // 약 -6 dBFS
+        // 1.0초는 차 안 기준(1.5초) 미달, 1.5초면 알림
+        engine().run(flow { repeat(10) { emit(louder) }; repeat(30) { emit(quiet) } }, alerts, FakeStreams(), DetectionPreset.CAR)
+        assertTrue(alerts.sent.isEmpty())
+        engine().run(flow { repeat(15) { emit(louder) } }, alerts, FakeStreams(), DetectionPreset.CAR)
+        assertEquals(1, alerts.sent.size)
+    }
+
+    @Test
+    fun setPreset_whileRunning_appliesOnNextFrame() = runTest {
+        val e = engine()
+        val alerts = FakeAlerts()
+        val input = startEngine(e, alerts = alerts)
+        assertEquals(DetectionPreset.HOME, e.state.value.preset)
+        e.setPreset(DetectionPreset.CAR)
+        input.send(quiet)
+        runCurrent()
+        assertEquals(DetectionPreset.CAR, e.state.value.preset)
+        assertEquals(Constants.Alert.CAR_THRESHOLD_DBFS, e.state.value.thresholdDbfs, 0f)
+        repeat(20) { input.send(loud) } // -20 dBFS >= -25 → 2초면 알림
+        runCurrent()
+        assertEquals(1, alerts.sent.size)
+    }
+
+    @Test
+    fun setPreset_whenIdle_updatesStateImmediately() {
+        val e = engine()
+        e.setPreset(DetectionPreset.CAR)
+        assertEquals(DetectionPreset.CAR, e.state.value.preset)
+        assertEquals(-25f, e.state.value.thresholdDbfs, 0f)
     }
 
     @Test

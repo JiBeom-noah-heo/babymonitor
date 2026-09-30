@@ -4,6 +4,7 @@ import com.watchbabymonitor.shared.AudioLevel
 import com.watchbabymonitor.shared.Clock
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
+import com.watchbabymonitor.shared.DetectionPreset
 import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.shared.NoiseDetector
 import kotlinx.coroutines.CancellationException
@@ -25,6 +26,7 @@ data class SensorState(
     val running: Boolean = false,
     val dbfs: Float = Constants.Audio.MIN_DBFS,
     val thresholdDbfs: Float = Constants.Alert.DEFAULT_THRESHOLD_DBFS,
+    val preset: DetectionPreset = DetectionPreset.DEFAULT,
     val alertCount: Int = 0,
     val lastAlert: NoiseAlert? = null,
     /** 마지막 알림을 보낸 수신기 수. null = 전송 중, 0 = 실패. */
@@ -77,6 +79,9 @@ class SensorEngine(
     @Volatile
     private var pendingThreshold: Float? = null
 
+    @Volatile
+    private var pendingPreset: DetectionPreset? = null
+
     // startStream / stopStream 은 녹음 코루틴과 리스너 스레드에서 동시에 올 수 있음
     private val streamLock = Any()
 
@@ -96,12 +101,16 @@ class SensorEngine(
         frames: Flow<ShortArray>,
         alerts: AlertSink,
         streams: StreamSinkFactory,
-        detector: NoiseDetector = NoiseDetector(),
+        preset: DetectionPreset = DetectionPreset.DEFAULT,
     ) = coroutineScope {
+        var detector = preset.newDetector()
+        pendingPreset = null
         runScope = this
         streamSinks = streams
-        _state.update { it.copy(running = true, thresholdDbfs = detector.thresholdDbfs, error = null) }
-        log.i("monitoring started, threshold=${detector.thresholdDbfs} dBFS")
+        _state.update {
+            it.copy(running = true, preset = preset, thresholdDbfs = detector.thresholdDbfs, error = null)
+        }
+        log.i("monitoring started, preset=$preset, threshold=${detector.thresholdDbfs} dBFS")
 
         var frameCount = 0L
         var maxSinceHeartbeat = Constants.Audio.MIN_DBFS
@@ -110,6 +119,12 @@ class SensorEngine(
                 // 라이브 듣기 중이면 같은 프레임을 수신기로도 (대기열이 넘치면 오래된 것부터 버림)
                 stream?.queue?.trySend(frame)
 
+                pendingPreset?.let { p ->
+                    pendingPreset = null
+                    detector = p.newDetector()
+                    _state.update { it.copy(preset = p, thresholdDbfs = p.thresholdDbfs) }
+                    log.i("preset changed to $p, threshold=${p.thresholdDbfs} dBFS")
+                }
                 pendingThreshold?.let { t ->
                     pendingThreshold = null
                     detector.thresholdDbfs = t
@@ -187,6 +202,18 @@ class SensorEngine(
                 ControlResult(Constants.CONTROL_REPLY_OK)
             }
             null -> ControlResult(Constants.CONTROL_REPLY_UNKNOWN)
+        }
+    }
+
+    /**
+     * 감지 프리셋 변경 (집 안 / 차 안). 모니터링 중이면 다음 프레임부터 새 조건으로 판정
+     * (판정 구간·쿨다운도 새로 시작).
+     */
+    fun setPreset(preset: DetectionPreset) {
+        if (_state.value.running) {
+            pendingPreset = preset
+        } else {
+            _state.update { it.copy(preset = preset, thresholdDbfs = preset.thresholdDbfs) }
         }
     }
 

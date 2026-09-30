@@ -47,6 +47,9 @@ object Constants {
     /** 이 역할에서 처리하지 않는 명령 (예: 수신기에 STREAM_ON). */
     const val CONTROL_REPLY_UNSUPPORTED = "${CONTROL_REPLY_ERROR_PREFIX}UNSUPPORTED"
 
+    /** 상대가 감지기가 아님 (수신기 역할 기기에 START / STREAM_ON 등). 역할 충돌 확인용. */
+    const val CONTROL_REPLY_WRONG_ROLE = "${CONTROL_REPLY_ERROR_PREFIX}WRONG_ROLE"
+
     /** 폰 → 워치 요청 응답 대기 시간. */
     const val CONTROL_REQUEST_TIMEOUT_MS = 5_000L
 
@@ -88,6 +91,15 @@ object Constants {
 
         /** 알림 후 다음 알림까지 최소 간격. */
         const val COOLDOWN_MS = 30_000L
+
+        /**
+         * 차 안 프리셋 (CLAUDE.md §4-8, §8): 에어컨·주행 소음이 커서 집 안 값이면 오탐 폭주.
+         * 임계값을 올리고 더 오래 지속될 때만, 쿨다운은 길게. 값은 실차 측정 전 초기값 (Phase 3.5 devlog 에서 조정).
+         */
+        const val CAR_THRESHOLD_DBFS = -25f
+        const val CAR_SUSTAIN_MS = 1_500
+        const val CAR_SUSTAIN_WINDOW_MS = 2_000
+        const val CAR_COOLDOWN_MS = 60_000L
     }
 
     /** 라이브 스트리밍 (ADR 004). 목표: 지연 2초 이내. */
