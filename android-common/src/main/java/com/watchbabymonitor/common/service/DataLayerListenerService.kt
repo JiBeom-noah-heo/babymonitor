@@ -5,11 +5,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.wearable.CapabilityInfo
+import com.google.android.gms.wearable.DataEvent
+import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import com.watchbabymonitor.common.DeviceInfo
 import com.watchbabymonitor.common.Engines
+import com.watchbabymonitor.common.LinkMonitor
 import com.watchbabymonitor.common.RoleStore
+import com.watchbabymonitor.common.StatusHub
 import com.watchbabymonitor.common.notification.NoiseNotifications
 import com.watchbabymonitor.common.notification.WatchAlert
 import com.watchbabymonitor.shared.Constants
@@ -55,6 +61,29 @@ class DataLayerListenerService : WearableListenerService() {
         }
         Log.i(TAG, "${cmd?.encode() ?: "UNKNOWN(${request.size}B)"} from=$nodeId role=$role -> $reply")
         return Tasks.forResult(reply.toByteArray(Charsets.UTF_8))
+    }
+
+    /** 상대의 `/status` 변경 (앱이 꺼져 있어도 깨어남). 내 노드가 쓴 것은 무시. */
+    override fun onDataChanged(events: DataEventBuffer) {
+        try {
+            val localId = Tasks.await(Wearable.getNodeClient(this).localNode).id
+            events.forEach { event ->
+                val item = event.dataItem
+                if (event.type != DataEvent.TYPE_CHANGED || item.uri.path != Constants.Paths.STATUS) return@forEach
+                if (item.uri.host == localId) return@forEach
+                StatusHub.decode(item)?.let { StatusHub.acceptPeer(this, it) }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "onDataChanged failed", e)
+        } finally {
+            events.release()
+        }
+    }
+
+    /** 상대 기기에 닿을 수 있는지 바뀜 (블루투스 끊김·클라우드 전환 등). */
+    override fun onCapabilityChanged(info: CapabilityInfo) {
+        if (info.name != Constants.Link.CAPABILITY) return
+        LinkMonitor.onNodes(this, info.nodes)
     }
 
     override fun onMessageReceived(event: MessageEvent) {

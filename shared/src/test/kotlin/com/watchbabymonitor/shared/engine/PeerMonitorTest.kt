@@ -73,6 +73,14 @@ class PeerMonitorTest {
     }
 
     @Test
+    fun duplicateDelivery_isIgnored() {
+        val s = sensor(battery = 10)
+        assertEquals(listOf(PeerEvent.LOW_BATTERY), m.onPeerStatus(s))
+        m.onPeerStatus(sensor(battery = 90)) // 재준비
+        assertTrue("같은 ts 로 다시 와도 무시", m.onPeerStatus(s).isEmpty())
+    }
+
+    @Test
     fun lowBatteryAndMute_together() {
         val events = m.onPeerStatus(sensor(battery = 10, muted = true))
         assertEquals(listOf(PeerEvent.LOW_BATTERY, PeerEvent.MIC_MUTED), events)

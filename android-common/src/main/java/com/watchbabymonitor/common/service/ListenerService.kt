@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -97,7 +98,7 @@ class ListenerService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
         )
         stopRequested = false
-        session = scope.launch { runSession() }
+        session = scope.launch { runWithReconnect() }
         return START_NOT_STICKY
     }
 
@@ -113,20 +114,55 @@ class ListenerService : Service() {
         }
     }
 
-    private suspend fun runSession() {
+    private data class SessionResult(val end: StreamEnd, val detail: String? = null, val playedBytes: Long = 0)
+
+    /**
+     * 세션을 돌리고, 끊기면 [ReceiverEngine.retryDelayMs] 에 따라 다시 연결한다 (Phase 5).
+     * 사용자가 끄거나, 감지기가 모니터링 중이 아니거나, 10분 넘게 실패하면 끝.
+     */
+    private suspend fun runWithReconnect() {
+        val engine = Engines.receiver
+        var attempt = 0
+        var firstFailureAt: Long? = null
+        try {
+            while (true) {
+                val result = runSession()
+                if (stopRequested || result.end == StreamEnd.USER_STOPPED) break
+
+                val now = SystemClock.elapsedRealtime()
+                // 소리가 들어왔던 세션이 끊긴 거면 처음부터 다시 센다
+                if (result.playedBytes > 0) {
+                    attempt = 0
+                    firstFailureAt = null
+                }
+                val first = firstFailureAt ?: now.also { firstFailureAt = it }
+                val wait = ReceiverEngine.retryDelayMs(result.end, attempt, now - first)
+                if (wait == null) {
+                    engine.sessionEnded(result.end, result.detail)
+                    break
+                }
+                attempt++
+                engine.reconnecting(attempt, wait, result.end)
+                delay(wait)
+            }
+        } finally {
+            withContext(NonCancellable) {
+                if (stopRequested) engine.sessionEnded(StreamEnd.USER_STOPPED)
+                ServiceCompat.stopForeground(this@ListenerService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
+    }
+
+    /** 한 번의 연결: 감지기 찾기 → STREAM_ON → 채널 → 재생. 끝나면 채널·요청을 정리한다. */
+    private suspend fun runSession(): SessionResult {
         val engine = Engines.receiver
         engine.sessionStarted()
-        var end = StreamEnd.USER_STOPPED
-        var detail: String? = null
         var sensorNodeId: String? = null
         try {
             channelClient.registerChannelCallback(channelCallback).await()
 
-            val node = control.connectedNodes().firstOrNull()
-            if (node == null) {
-                end = StreamEnd.NO_PEER
-                return
-            }
+            val node = control.connectedNodes().firstOrNull() ?: return SessionResult(StreamEnd.NO_PEER)
             sensorNodeId = node.id
             engine.peerFound(node.displayName)
 
@@ -135,39 +171,28 @@ class ListenerService : Service() {
 
             val reply = control.send(node.id, ControlCommand.StreamOn)
             Log.i(TAG, "STREAM_ON -> $reply")
-            engine.onStreamOnReply(reply)?.let {
-                end = it
-                detail = reply
-                return
-            }
+            engine.onStreamOnReply(reply)?.let { return SessionResult(it, reply) }
 
             val channel = withTimeout(Constants.Stream.CHANNEL_OPEN_TIMEOUT_MS) { opened.await() }
             activeChannel = channel
-            end = play(channel)
+            val (end, played) = play(channel)
+            return SessionResult(end, playedBytes = played)
         } catch (e: TimeoutCancellationException) {
             Log.w(TAG, "sensor did not respond", e)
-            end = StreamEnd.NO_RESPONSE
+            return SessionResult(StreamEnd.NO_RESPONSE)
         } catch (e: CancellationException) {
-            end = StreamEnd.USER_STOPPED
             throw e
         } catch (e: Exception) {
-            if (stopRequested) {
-                end = StreamEnd.USER_STOPPED
-            } else {
-                Log.e(TAG, "live session failed", e)
-                end = StreamEnd.FAILED
-                detail = e.message ?: e.javaClass.simpleName
-            }
+            if (stopRequested) return SessionResult(StreamEnd.USER_STOPPED)
+            Log.e(TAG, "live session failed", e)
+            return SessionResult(StreamEnd.FAILED, e.message ?: e.javaClass.simpleName)
         } finally {
-            withContext(NonCancellable) {
-                cleanup(sensorNodeId)
-                engine.sessionEnded(if (stopRequested) StreamEnd.USER_STOPPED else end, detail)
-            }
+            withContext(NonCancellable) { cleanupSession(sensorNodeId) }
         }
     }
 
-    /** 채널이 닫히거나 끊길 때까지 재생. 끝난 이유를 돌려준다. */
-    private suspend fun play(channel: ChannelClient.Channel): StreamEnd = withContext(Dispatchers.IO) {
+    /** 채널이 닫히거나 끊길 때까지 재생. 끝난 이유와 받은 바이트 수를 돌려준다. */
+    private suspend fun play(channel: ChannelClient.Channel): Pair<StreamEnd, Long> = withContext(Dispatchers.IO) {
         val engine = Engines.receiver
         val input = channelClient.getInputStream(channel).await()
         val player = AudioPlayer()
@@ -207,10 +232,10 @@ class ListenerService : Service() {
             Log.i(TAG, "played ${Pcm16.bytesToMs(totalBytes) / 1000}s, dropped ${st.droppedMs}ms, resyncs=${st.resyncs}, underruns=${st.underruns}")
             player.release()
         }
-        if (disconnected.get()) StreamEnd.DISCONNECTED else StreamEnd.SENSOR_ENDED
+        (if (disconnected.get()) StreamEnd.DISCONNECTED else StreamEnd.SENSOR_ENDED) to totalBytes
     }
 
-    private suspend fun cleanup(sensorNodeId: String?) {
+    private suspend fun cleanupSession(sensorNodeId: String?) {
         channelOpened = null
         activeChannel?.let {
             try {
@@ -232,8 +257,6 @@ class ListenerService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "unregisterChannelCallback failed", e)
         }
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     override fun onDestroy() {

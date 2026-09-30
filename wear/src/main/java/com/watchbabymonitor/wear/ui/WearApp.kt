@@ -44,6 +44,8 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.common.Engines
+import com.watchbabymonitor.common.Link
+import com.watchbabymonitor.common.LinkMonitor
 import com.watchbabymonitor.common.RoleControl
 import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.StatusHub
@@ -78,6 +80,7 @@ fun WearApp() {
     val sensor by Engines.sensor.state.collectAsState()
     val receiver by Engines.receiver.state.collectAsState()
     val peer by StatusHub.peer.collectAsState()
+    val link by LinkMonitor.state.collectAsState()
     var connected by remember { mutableStateOf("확인 중…") }
 
     fun granted(permission: String) =
@@ -112,6 +115,7 @@ fun WearApp() {
         header = "${role.label} · " + if (ping.count == 0) connected else "$connected · PING ${ping.count}",
         role = role,
         peer = peer,
+        link = link.link,
         sensor = sensor,
         preset = preset,
         receiver = receiver,
@@ -155,6 +159,7 @@ private fun WearScreen(
     header: String,
     role: Role,
     peer: DeviceStatus?,
+    link: Link,
     sensor: SensorState,
     preset: DetectionPreset,
     receiver: ReceiverState,
@@ -175,6 +180,14 @@ private fun WearScreen(
                 autoCentering = AutoCenteringParams(itemIndex = 1),
             ) {
                 item { Caption(header) }
+                when (link) {
+                    Link.DISCONNECTED -> item { Warning("폰과 연결 끊김") }
+                    Link.REMOTE -> item { Caption("원격 연결 (클라우드)") }
+                    else -> Unit
+                }
+                if (role == Role.RECEIVER && peer?.role == Role.SENSOR && peer.micMuted) {
+                    item { Warning("감지기 마이크 막힘 (통화 중?)") }
+                }
                 if (peer != null && Role.conflicts(role, peer.role)) {
                     item {
                         Text(
@@ -200,6 +213,11 @@ private fun WearScreen(
             TimeText()
         }
     }
+}
+
+@Composable
+private fun Warning(text: String) {
+    Text(text, style = MaterialTheme.typography.caption2, color = MaterialTheme.colors.error, textAlign = TextAlign.Center)
 }
 
 @Composable
@@ -376,6 +394,7 @@ private fun ReceiverPreview() {
         header = "수신기 · Galaxy S26+",
         role = Role.RECEIVER,
         peer = DeviceStatus(role = Role.SENSOR, monitoring = true, batteryPercent = 80, ts = 0L),
+        link = Link.NEARBY,
         sensor = SensorState(),
         preset = DetectionPreset.CAR,
         receiver = ReceiverState(alertCount = 2, lastAlert = NoiseAlert(-18f, 0L)),

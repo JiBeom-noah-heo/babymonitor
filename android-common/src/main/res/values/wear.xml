@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CapabilityClient: 이 앱이 설치된 기기를 찾고 연결 변화를 받기 위한 이름 (Constants.Link.CAPABILITY) -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities">
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>watch_baby_monitor</item>
+    </string-array>
+</resources>

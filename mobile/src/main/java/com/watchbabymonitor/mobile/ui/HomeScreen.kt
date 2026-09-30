@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.watchbabymonitor.common.Link
+import com.watchbabymonitor.common.LinkState
 import com.watchbabymonitor.common.label
 import com.watchbabymonitor.mobile.ui.theme.WatchBabyMonitorTheme
 import com.watchbabymonitor.shared.AudioLevel
@@ -60,6 +62,7 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
     val role by viewModel.role.collectAsStateWithLifecycle()
     val preset by viewModel.preset.collectAsStateWithLifecycle()
     val peer by viewModel.peer.collectAsStateWithLifecycle()
+    val link by viewModel.link.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var micDenied by remember { mutableStateOf(false) }
@@ -71,6 +74,7 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
     HomeContent(
         role = role,
         peer = peer,
+        link = link,
         onRoleChange = viewModel::setRole,
         sensor = sensor,
         preset = preset,
@@ -98,6 +102,7 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
 private fun HomeContent(
     role: Role,
     peer: DeviceStatus?,
+    link: LinkState,
     onRoleChange: (Role) -> Unit,
     sensor: SensorState,
     preset: DetectionPreset,
@@ -118,7 +123,7 @@ private fun HomeContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Text("베이비 모니터", style = MaterialTheme.typography.headlineSmall) }
-        item { RoleCard(role = role, peer = peer, onRoleChange = onRoleChange) }
+        item { RoleCard(role = role, peer = peer, link = link, onRoleChange = onRoleChange) }
         when (role) {
             Role.SENSOR -> item {
                 SensorCard(sensor, preset, micDenied, onMonitoringChange, onPresetChange)
@@ -138,8 +143,9 @@ private fun HomeContent(
 
 /** 역할 선택 + 상대 기기 상태 + 역할 충돌 경고 (CLAUDE.md §1, §3). */
 @Composable
-private fun RoleCard(role: Role, peer: DeviceStatus?, onRoleChange: (Role) -> Unit) {
+private fun RoleCard(role: Role, peer: DeviceStatus?, link: LinkState, onRoleChange: (Role) -> Unit) {
     val conflict = peer != null && Role.conflicts(role, peer.role)
+    val warnings = peerWarnings(role, peer, link)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = if (conflict) {
@@ -159,7 +165,9 @@ private fun RoleCard(role: Role, peer: DeviceStatus?, onRoleChange: (Role) -> Un
                     )
                 }
             }
+            Text(linkSummary(link), style = MaterialTheme.typography.bodyMedium)
             Text(peerSummary(peer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            warnings.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
             if (conflict) {
                 Text(
                     "두 기기 모두 ${role.label}예요. 한쪽을 ${role.opposite.label}로 바꿔 주세요.",
@@ -169,6 +177,25 @@ private fun RoleCard(role: Role, peer: DeviceStatus?, onRoleChange: (Role) -> Un
             }
         }
     }
+}
+
+/** 연결 경로 (CLAUDE.md §3): 근처 = 블루투스, 원격 = 클라우드 경유. */
+private fun linkSummary(link: LinkState): String = when (link.link) {
+    Link.UNKNOWN -> "연결: 확인 중…"
+    Link.NEARBY -> "연결: 근처 (블루투스)"
+    Link.REMOTE -> "연결: 원격 (클라우드 경유 · 라이브 오디오는 지연될 수 있어요)"
+    Link.DISCONNECTED -> "연결: 끊김 (${hhmm(link.sinceMs)}부터)"
+}
+
+/** 수신기에서 보여줄 감지기 경고 (Phase 5). */
+private fun peerWarnings(role: Role, peer: DeviceStatus?, link: LinkState): List<String> {
+    val w = mutableListOf<String>()
+    if (link.link == Link.DISCONNECTED) w += "상대 기기와 연결이 끊겼어요"
+    if (role == Role.RECEIVER && peer?.role == Role.SENSOR) {
+        if (peer.micMuted) w += "감지기 마이크가 막혔어요 (통화 중이면 아이 소리를 못 들어요)"
+        peer.batteryPercent?.let { if (it <= Constants.Link.LOW_BATTERY_PERCENT) w += "감지기 배터리 $it%" }
+    }
+    return w
 }
 
 private fun peerSummary(peer: DeviceStatus?): String {
@@ -345,6 +372,7 @@ private fun HomeContentPreview() {
         HomeContent(
             role = Role.RECEIVER,
             peer = DeviceStatus(role = Role.SENSOR, monitoring = true, batteryPercent = 92, ts = 0L),
+            link = LinkState(Link.NEARBY),
             onRoleChange = {},
             sensor = SensorState(),
             preset = DetectionPreset.HOME,

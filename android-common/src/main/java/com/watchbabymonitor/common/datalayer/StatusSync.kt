@@ -69,7 +69,8 @@ class StatusSync(context: Context, private val log: EngineLog) {
         awaitClose { dataClient.removeListener(listener) }
     }
 
-    private fun decode(item: DataItem): DeviceStatus? = try {
+    /** `/status` DataItem → [DeviceStatus]. 형식이 틀리면 null. */
+    fun decode(item: DataItem): DeviceStatus? = try {
         DataMapItem.fromDataItem(item).dataMap.getByteArray(KEY_JSON)?.let(DeviceStatus::fromBytes)
     } catch (e: IllegalArgumentException) {
         log.w("malformed /status from ${item.uri.host}", e)

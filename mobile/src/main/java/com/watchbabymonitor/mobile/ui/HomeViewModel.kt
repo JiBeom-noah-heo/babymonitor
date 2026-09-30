@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Node
 import com.watchbabymonitor.common.datalayer.ControlClient
+import com.watchbabymonitor.common.LinkMonitor
+import com.watchbabymonitor.common.LinkState
 import com.watchbabymonitor.common.RoleControl
 import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.common.StatusHub
@@ -58,6 +60,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 상대 기기의 /status. 역할 충돌 경고·원격 제어 버튼에 사용. */
     val peer: StateFlow<DeviceStatus?> = StatusHub.peer
+
+    /** 상대와의 연결 경로 (근처 / 원격 / 끊김). */
+    val link: StateFlow<LinkState> = LinkMonitor.state
 
     /** 라이브 듣기 켜기/끄기. 앱이 화면에 있을 때만 호출 (포그라운드 서비스 시작 제한). */
     fun setLive(on: Boolean) {

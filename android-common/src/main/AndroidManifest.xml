@@ -35,6 +35,21 @@
                     android:pathPrefix="/alert"
                     android:scheme="wear" />
             </intent-filter>
+            <!-- Phase 5: 상대 /status 변경 (배터리·마이크 막힘), 연결 변화 → 수신기 알림 -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:path="/status"
+                    android:scheme="wear" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.CAPABILITY_CHANGED" />
+                <data
+                    android:host="*"
+                    android:path="/watch_baby_monitor"
+                    android:scheme="wear" />
+            </intent-filter>
         </service>
 
         <!-- 감지기: 화면이 꺼져도 마이크 측정 유지 (CLAUDE.md §4-5) -->

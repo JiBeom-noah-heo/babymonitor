@@ -62,9 +62,12 @@ class PeerMonitor(private val clock: Clock = Clock.MONOTONIC) {
         return listOf(PeerEvent.DISCONNECTED)
     }
 
-    /** 상대의 `/status` 가 올 때. 감지기일 때만 배터리·마이크를 본다. 오래된 상태는 무시. */
+    /**
+     * 상대의 `/status` 가 올 때. 감지기일 때만 배터리·마이크를 본다.
+     * 오래된 상태·같은 상태의 중복 전달(실시간 리스너 + 백그라운드 리스너)은 무시.
+     */
     fun onPeerStatus(status: DeviceStatus): List<PeerEvent> {
-        if (status.ts < lastTs) return emptyList()
+        if (status.ts <= lastTs) return emptyList()
         lastTs = status.ts
         if (status.role != Role.SENSOR) return emptyList()
 
