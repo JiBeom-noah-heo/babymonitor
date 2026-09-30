@@ -331,6 +331,33 @@ class SensorEngineTest {
         assertEquals(-25f, e.state.value.thresholdDbfs, 0f)
     }
 
+    // ---- 마이크 막힘 (Phase 5) ----
+
+    @Test
+    fun zeroInputFor3s_setsMicMuted_andRecovers() = runTest {
+        val e = engine()
+        val input = startEngine(e)
+        val zero = ShortArray(Constants.Audio.SAMPLES_PER_WINDOW)
+        repeat(29) { input.send(zero) }
+        runCurrent()
+        assertFalse("2.9초는 아직", e.state.value.micMuted)
+        input.send(zero)
+        runCurrent()
+        assertTrue(e.state.value.micMuted)
+        input.send(quiet)
+        runCurrent()
+        assertFalse(e.state.value.micMuted)
+    }
+
+    @Test
+    fun quietRoom_isNotMuted() = runTest {
+        val e = engine()
+        val input = startEngine(e)
+        repeat(100) { input.send(quiet) }
+        runCurrent()
+        assertFalse(e.state.value.micMuted)
+    }
+
     @Test
     fun reportError_setsError() {
         val e = engine()

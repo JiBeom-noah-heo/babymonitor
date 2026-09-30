@@ -121,5 +121,28 @@ object Constants {
 
         /** START 후 워치가 채널을 열 때까지 기다리는 시간. */
         const val CHANNEL_OPEN_TIMEOUT_MS = 10_000L
+
+        /** 끊긴 라이브 듣기 자동 재연결: 첫 대기, 최대 대기, 포기까지 (Phase 5). */
+        const val RECONNECT_FIRST_DELAY_MS = 2_000L
+        const val RECONNECT_MAX_DELAY_MS = 30_000L
+        const val RECONNECT_GIVE_UP_MS = 10 * 60_000L
+    }
+
+    /** 연결·상대 기기 감시 (Phase 5). */
+    object Link {
+        /** 블루투스가 잠깐 흔들려도 알리지 않도록, 이만큼 계속 끊겨야 "연결 끊김" 알림. */
+        const val DISCONNECT_GRACE_MS = 30_000L
+
+        /** 감지기 배터리가 이 값 이하로 떨어지면 수신기에 알림 (CLAUDE.md Phase 5). */
+        const val LOW_BATTERY_PERCENT = 20
+
+        /** 알림 후 이 값을 넘게 충전되면 다음 저전력 알림을 다시 준비. */
+        const val LOW_BATTERY_REARM_PERCENT = 25
+
+        /** 마이크 입력이 이만큼 완전히 0 이면 "마이크 막힘" (통화 중 등). 실제 방 소리는 0 이 아님. */
+        const val MIC_MUTED_DETECT_MS = 3_000
+
+        /** 이 기기들이 앱을 설치했음을 알리는 CapabilityClient 이름 (res/values/wear.xml). */
+        const val CAPABILITY = "watch_baby_monitor"
     }
 }

@@ -274,9 +274,10 @@ private fun LiveCard(live: ReceiverState, onLiveChange: (Boolean) -> Unit) {
                             StreamPhase.CONNECTING -> "연결 중…"
                             StreamPhase.PLAYING -> "${live.peerName ?: "감지기"} 소리 재생 중"
                             StreamPhase.STALLED -> "소리가 끊겼어요 (기다리는 중)"
+                            StreamPhase.RECONNECTING -> "다시 연결하는 중…"
                         },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (live.phase == StreamPhase.STALLED) {
+                        color = if (live.phase == StreamPhase.STALLED || live.phase == StreamPhase.RECONNECTING) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant

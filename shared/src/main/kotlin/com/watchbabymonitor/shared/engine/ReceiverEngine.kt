@@ -18,6 +18,9 @@ enum class StreamPhase {
     CONNECTING,
     PLAYING,
     STALLED,
+
+    /** 끊긴 뒤 자동으로 다시 연결하려고 기다리는 중 (Phase 5). */
+    RECONNECTING,
 }
 
 /** 라이브 듣기 세션이 끝난 이유. 사용자 문구는 [ReceiverEngine] 이 만든다. */
@@ -181,6 +184,20 @@ class ReceiverEngine(
         }
     }
 
+    /** 자동 재연결 대기 표시. */
+    fun reconnecting(attempt: Int, delayMs: Long, reason: StreamEnd) {
+        val peer = _state.value.peerName ?: "감지기"
+        log.i("reconnect #$attempt in ${delayMs}ms after $reason")
+        _state.update {
+            it.copy(
+                phase = StreamPhase.RECONNECTING,
+                backlogMs = 0,
+                kbps = 0,
+                error = "$peer 연결이 끊겨 ${delayMs / 1000}초 뒤 다시 연결해요 (${attempt}번째)",
+            )
+        }
+    }
+
     /** 세션 종료. [detail] 은 REJECTED(응답 원문) / FAILED(예외 메시지) 에 붙는다. */
     fun sessionEnded(end: StreamEnd, detail: String? = null) {
         val msg = messageFor(end, detail, _state.value.peerName ?: "감지기")
@@ -210,6 +227,24 @@ class ReceiverEngine(
          * 재생 대기량이 상한을 넘으면 오래된 소리를 버리고 최신부터 다시 (ADR 004).
          * 재생 시작 전(prebuffer 중)에는 버리지 않는다.
          */
+        /**
+         * 끊긴 라이브 듣기를 다시 시도할지, 몇 ms 뒤에 할지 (Phase 5).
+         * 사용자가 끈 경우, 감지기가 모니터링 중이 아니거나 거절한 경우는 재시도하지 않는다.
+         * @param attempt 0 부터
+         * @param sinceFirstFailureMs 처음 끊긴 뒤 지난 시간. [Constants.Stream.RECONNECT_GIVE_UP_MS] 넘으면 포기
+         * @return 대기 시간, 재시도 안 하면 null
+         */
+        fun retryDelayMs(end: StreamEnd, attempt: Int, sinceFirstFailureMs: Long): Long? {
+            val retryable = when (end) {
+                StreamEnd.SENSOR_ENDED, StreamEnd.DISCONNECTED, StreamEnd.NO_RESPONSE,
+                StreamEnd.NO_PEER, StreamEnd.FAILED -> true
+                StreamEnd.USER_STOPPED, StreamEnd.SENSOR_NOT_MONITORING, StreamEnd.REJECTED -> false
+            }
+            if (!retryable || sinceFirstFailureMs >= Constants.Stream.RECONNECT_GIVE_UP_MS) return null
+            val backoff = Constants.Stream.RECONNECT_FIRST_DELAY_MS shl attempt.coerceAtMost(10)
+            return backoff.coerceAtMost(Constants.Stream.RECONNECT_MAX_DELAY_MS)
+        }
+
         fun shouldResync(started: Boolean, backlogMs: Long): Boolean =
             started && backlogMs > Constants.Stream.MAX_PLAYBACK_BACKLOG_MS
 

@@ -34,6 +34,8 @@ data class SensorState(
     val error: String? = null,
     /** 라이브 오디오를 보내는 중. */
     val streaming: Boolean = false,
+    /** 마이크 입력이 완전히 0 — 통화 등으로 다른 앱이 마이크를 가져감 (Phase 5). */
+    val micMuted: Boolean = false,
 )
 
 /** `/control` 처리 후 플랫폼이 해야 할 일. 엔진은 포그라운드 서비스를 직접 켜고 끌 수 없다. */
@@ -114,6 +116,7 @@ class SensorEngine(
 
         var frameCount = 0L
         var maxSinceHeartbeat = Constants.Audio.MIN_DBFS
+        var silentFrames = 0
         try {
             frames.collect { frame ->
                 // 라이브 듣기 중이면 같은 프레임을 수신기로도 (대기열이 넘치면 오래된 것부터 버림)
@@ -134,6 +137,14 @@ class SensorEngine(
 
                 val dbfs = AudioLevel.dbfs(frame)
                 _state.update { it.copy(dbfs = dbfs) }
+
+                // 실제 방 소리는 완전한 0 이 아니다. 0 이 이어지면 마이크를 뺏긴 것 (통화 중 등)
+                if (dbfs <= Constants.Audio.MIN_DBFS) silentFrames++ else silentFrames = 0
+                val muted = silentFrames >= MUTED_FRAMES
+                if (muted != _state.value.micMuted) {
+                    log.i(if (muted) "mic muted (no signal for ${Constants.Link.MIC_MUTED_DETECT_MS}ms)" else "mic signal back")
+                    _state.update { it.copy(micMuted = muted) }
+                }
                 detector.onLevel(dbfs, clock.nowMs())?.let { alert ->
                     log.i("noise alert level=${alert.level}")
                     _state.update {
@@ -162,7 +173,9 @@ class SensorEngine(
             stopStream()
             runScope = null
             streamSinks = null
-            _state.update { it.copy(running = false, streaming = false, dbfs = Constants.Audio.MIN_DBFS) }
+            _state.update {
+                it.copy(running = false, streaming = false, micMuted = false, dbfs = Constants.Audio.MIN_DBFS)
+            }
             log.i("monitoring stopped")
         }
     }
@@ -292,5 +305,7 @@ class SensorEngine(
     private companion object {
         /** 1분마다 동작 로그. */
         const val HEARTBEAT_FRAMES = 60_000L / Constants.Audio.LEVEL_WINDOW_MS
+
+        const val MUTED_FRAMES = Constants.Link.MIC_MUTED_DETECT_MS / Constants.Audio.LEVEL_WINDOW_MS
     }
 }

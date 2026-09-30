@@ -115,6 +115,30 @@ class ReceiverEngineTest {
     }
 
     @Test
+    fun retryDelay_backsOffAndCaps() {
+        val d = (0..6).map { ReceiverEngine.retryDelayMs(StreamEnd.DISCONNECTED, it, 0) }
+        assertEquals(listOf(2_000L, 4_000L, 8_000L, 16_000L, 30_000L, 30_000L, 30_000L), d)
+    }
+
+    @Test
+    fun retryDelay_notForUserStopOrRejection_andGivesUp() {
+        assertNull(ReceiverEngine.retryDelayMs(StreamEnd.USER_STOPPED, 0, 0))
+        assertNull(ReceiverEngine.retryDelayMs(StreamEnd.SENSOR_NOT_MONITORING, 0, 0))
+        assertNull(ReceiverEngine.retryDelayMs(StreamEnd.REJECTED, 0, 0))
+        assertEquals(2_000L, ReceiverEngine.retryDelayMs(StreamEnd.SENSOR_ENDED, 0, 0))
+        assertEquals(2_000L, ReceiverEngine.retryDelayMs(StreamEnd.NO_RESPONSE, 0, 0))
+        assertNull(ReceiverEngine.retryDelayMs(StreamEnd.DISCONNECTED, 3, Constants.Stream.RECONNECT_GIVE_UP_MS))
+    }
+
+    @Test
+    fun reconnecting_state() {
+        playing()
+        engine.reconnecting(attempt = 2, delayMs = 4_000, reason = StreamEnd.DISCONNECTED)
+        assertEquals(StreamPhase.RECONNECTING, engine.state.value.phase)
+        assertEquals("Galaxy Watch7 연결이 끊겨 4초 뒤 다시 연결해요 (2번째)", engine.state.value.error)
+    }
+
+    @Test
     fun shouldResync_onlyAfterStart_andOverLimit() {
         assertFalse(ReceiverEngine.shouldResync(started = false, backlogMs = 5_000))
         assertFalse(ReceiverEngine.shouldResync(started = true, backlogMs = 600))

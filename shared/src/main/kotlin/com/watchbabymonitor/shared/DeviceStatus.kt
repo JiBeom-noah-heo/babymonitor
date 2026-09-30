@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
  *
  * @property batteryPercent 0~100, 모르면 null
  * @property lastDbfs 감지기일 때 마지막 레벨, 수신기면 null
+ * @property micMuted 감지기 마이크가 막힘 — 통화 중이면 아이 소리를 못 들음
  * @property error 서비스 실패 사유 (CLAUDE.md §6 "실패는 /status 로 전파")
  * @property ts 이 상태를 만든 시각 (epoch millis)
  */
@@ -18,6 +19,8 @@ data class DeviceStatus(
     val streaming: Boolean = false,
     val batteryPercent: Int? = null,
     val lastDbfs: Float? = null,
+    /** 감지기 마이크 입력이 완전히 0 (통화 중 등, Phase 5). */
+    val micMuted: Boolean = false,
     val error: String? = null,
     val ts: Long,
 ) {

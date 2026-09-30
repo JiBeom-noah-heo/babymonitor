@@ -289,6 +289,7 @@ private fun ScalingLazyListScope.receiverItems(
                         StreamPhase.CONNECTING -> "연결 중… (끄기)"
                         StreamPhase.PLAYING -> "듣는 중 (끄기)"
                         StreamPhase.STALLED -> "끊김 (끄기)"
+                        StreamPhase.RECONNECTING -> "재연결 중 (끄기)"
                     },
                 )
             },

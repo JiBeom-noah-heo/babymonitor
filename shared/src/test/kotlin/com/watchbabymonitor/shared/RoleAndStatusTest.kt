@@ -32,7 +32,7 @@ class RoleAndStatusTest {
         val json = DeviceStatus(role = Role.SENSOR, monitoring = true, batteryPercent = 71, lastDbfs = -55.5f, ts = 1L)
             .toBytes().toString(Charsets.UTF_8)
         assertEquals(
-            """{"role":"SENSOR","monitoring":true,"streaming":false,"batteryPercent":71,"lastDbfs":-55.5,"error":null,"ts":1}""",
+            """{"role":"SENSOR","monitoring":true,"streaming":false,"batteryPercent":71,"lastDbfs":-55.5,"micMuted":false,"error":null,"ts":1}""",
             json,
         )
     }
