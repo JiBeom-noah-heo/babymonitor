@@ -29,8 +29,14 @@ object Constants {
     /** `/control` PING 요청에 대한 워치의 응답 본문. */
     const val CONTROL_REPLY_PONG = "PONG"
 
+    /** START / STOP 등 명령을 받아들였을 때의 응답. */
+    const val CONTROL_REPLY_OK = "OK"
+
     /** 알 수 없는 / 아직 지원하지 않는 명령에 대한 응답 접두사. */
     const val CONTROL_REPLY_ERROR_PREFIX = "ERR:"
+
+    /** START 를 받았지만 워치 모니터링이 꺼져 있음 (ADR 004). */
+    const val CONTROL_REPLY_NOT_MONITORING = "${CONTROL_REPLY_ERROR_PREFIX}NOT_MONITORING"
 
     /** 폰 → 워치 요청 응답 대기 시간. */
     const val CONTROL_REQUEST_TIMEOUT_MS = 5_000L
@@ -44,6 +50,11 @@ object Constants {
 
         /** 한 레벨 윈도우의 샘플 수 (16kHz × 100ms = 1600). */
         const val SAMPLES_PER_WINDOW = SAMPLE_RATE_HZ * LEVEL_WINDOW_MS / 1000
+
+        const val BYTES_PER_SAMPLE = 2
+
+        /** 한 레벨 윈도우(100ms)의 바이트 수. */
+        const val BYTES_PER_WINDOW = SAMPLES_PER_WINDOW * BYTES_PER_SAMPLE
 
         /** PCM16 풀스케일. dBFS 기준값. */
         const val FULL_SCALE = 32768.0
@@ -68,5 +79,26 @@ object Constants {
 
         /** 알림 후 다음 알림까지 최소 간격. */
         const val COOLDOWN_MS = 30_000L
+    }
+
+    /** 라이브 스트리밍 (ADR 004). 목표: 지연 2초 이내. */
+    object Stream {
+        /** 워치 송신 대기열. 넘치면 오래된 프레임부터 버림 → 지연이 쌓이지 않음. */
+        const val WATCH_QUEUE_FRAMES = 5
+
+        /** 폰에서 재생 시작 전에 모아둘 양. 너무 작으면 시작하자마자 끊김. */
+        const val PREBUFFER_MS = 300
+
+        /** 폰 재생 대기량이 이보다 많으면 받은 데이터를 버려서 따라잡는다. */
+        const val MAX_PLAYBACK_BACKLOG_MS = 600
+
+        /** 이 시간 동안 데이터가 없으면 "끊김" 표시. */
+        const val STALL_TIMEOUT_MS = 2_000L
+
+        /** 이 시간 동안 데이터가 없으면 연결이 끊긴 것으로 보고 종료 (CLAUDE.md §8). */
+        const val DISCONNECT_TIMEOUT_MS = 10_000L
+
+        /** START 후 워치가 채널을 열 때까지 기다리는 시간. */
+        const val CHANNEL_OPEN_TIMEOUT_MS = 10_000L
     }
 }

@@ -141,13 +141,14 @@ WatchBabyMonitor/
 - **완료 조건**: 워치 옆에서 박수 치면 다른 방의 폰이 울림
 
 ### Phase 4 — 라이브 오디오 스트리밍
-- [ ] 워치 `Streamer`: ChannelClient.openChannel → OutputStream에 PCM 쓰기
-- [ ] 폰 `ListenerService`: onChannelOpened → InputStream 읽어 AudioTrack 재생
-- [ ] 폰 UI: "라이브 듣기" 토글, 지연/끊김 표시
-- [ ] 폰 → 워치 `/control` START/STOP으로 스트리밍 제어
+- [x] 워치 `Streamer`: ChannelClient.openChannel → OutputStream에 PCM 쓰기
+- [x] 폰 `ListenerService`: onChannelOpened → InputStream 읽어 AudioTrack 재생
+- [x] 폰 UI: "라이브 듣기" 토글, 지연/끊김 표시
+- [x] 폰 → 워치 `/control` START/STOP으로 스트리밍 제어
 - **완료 조건**: 폰에서 워치 주변 소리가 2초 이내 지연으로 들림
 
 ### Phase 5 — 안정성 & 배터리
+- [ ] **워치 화면 꺼진 상태에서 라이브 스트림 유지** (현재 약 7초 뒤 정지, ADR 004)
 - [ ] 연결 끊김 감지 (CapabilityClient) → 양쪽 UI에 표시, 자동 재연결
 - [ ] 워치 배터리 %를 `/status`로 전송, 20% 이하 시 폰 알림
 - [ ] 1시간 연속 동작 배터리 소모 측정 → `docs/devlog/` 기록

@@ -206,6 +206,7 @@ private fun StatusLine(monitor: MonitorState, micDenied: Boolean) {
     val (text, isError) = when {
         micDenied -> "마이크 권한이 필요해요" to true
         monitor.error != null -> monitor.error to true
+        monitor.streaming -> "폰으로 소리 보내는 중" to false
         monitor.lastAlert != null -> alertSummary(monitor.alertCount, monitor.lastAlert, monitor.lastAlertDelivered) to false
         monitor.running -> "기준 ${monitor.thresholdDbfs.roundToInt()} dB" to false
         else -> "정지됨" to false

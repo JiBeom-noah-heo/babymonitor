@@ -17,18 +17,21 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.Wearable
+import com.watchbabymonitor.shared.AudioLevel
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.shared.NoiseDetector
 import com.watchbabymonitor.wear.MainActivity
 import com.watchbabymonitor.wear.R
-import com.watchbabymonitor.wear.audio.LevelMeter
+import com.watchbabymonitor.wear.audio.AudioCapture
+import com.watchbabymonitor.wear.audio.Streamer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlin.math.max
@@ -46,6 +49,11 @@ class MonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var monitorJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // 녹음 코루틴과 스트림 제어 코루틴이 함께 접근
+    @Volatile
+    private var streamer: Streamer? = null
+    private var streamJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -69,6 +77,7 @@ class MonitorService : Service() {
 
         acquireWakeLock()
         monitorJob = scope.launch { monitor() }
+        scope.launch { followStreamRequests() }
         // 프로세스가 죽은 뒤 자동 재시작하면 백그라운드 마이크 시작 제한에 걸리므로 NOT_STICKY
         return START_NOT_STICKY
     }
@@ -82,7 +91,11 @@ class MonitorService : Service() {
         var frames = 0L
         var maxDbfsSinceHeartbeat = Constants.Audio.MIN_DBFS
         try {
-            LevelMeter().levels().collect { dbfs ->
+            AudioCapture().frames().collect { frame ->
+                // 라이브 듣기 중이면 같은 프레임을 폰으로도 보낸다 (ADR 004)
+                streamer?.offer(frame)
+
+                val dbfs = AudioLevel.dbfs(frame)
                 MonitorStatus.onLevel(dbfs)
                 detector.onLevel(dbfs, System.currentTimeMillis())?.let { alert ->
                     Log.i(TAG, "noise alert level=${alert.level}")
@@ -104,6 +117,40 @@ class MonitorService : Service() {
             Log.e(TAG, "monitoring failed", e)
             MonitorStatus.onError("마이크 오류: ${e.message ?: e.javaClass.simpleName}")
             stopSelf()
+        }
+    }
+
+    /**
+     * [StreamRequests] 를 따라 스트리밍을 시작/중지한다.
+     * 모니터링이 이미 돌고 있을 때만 스트리밍 가능 — 녹음 중인 프레임을 나눠 보낸다.
+     */
+    private suspend fun followStreamRequests() {
+        StreamRequests.target.collect { nodeId ->
+            streamJob?.let { job ->
+                streamer?.close()
+                job.cancelAndJoin()
+            }
+            streamer = null
+            streamJob = null
+            if (nodeId == null) return@collect
+
+            val s = Streamer(this, nodeId)
+            streamer = s
+            streamJob = scope.launch {
+                MonitorStatus.onStreaming(true)
+                try {
+                    s.run()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // 폰이 채널을 닫은 경우도 여기로 온다
+                    Log.w(TAG, "streaming to $nodeId ended: ${e.message}")
+                } finally {
+                    if (streamer === s) streamer = null
+                    MonitorStatus.onStreaming(false)
+                    StreamRequests.finished(nodeId)
+                }
+            }
         }
     }
 
@@ -135,6 +182,8 @@ class MonitorService : Service() {
     }
 
     override fun onDestroy() {
+        streamer?.close()
+        StreamRequests.stop()
         scope.cancel()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null

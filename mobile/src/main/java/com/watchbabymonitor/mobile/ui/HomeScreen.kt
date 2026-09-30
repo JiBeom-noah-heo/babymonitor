@@ -16,6 +16,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,13 +27,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.watchbabymonitor.mobile.service.LivePhase
+import com.watchbabymonitor.mobile.service.LiveState
 import com.watchbabymonitor.mobile.ui.theme.WatchBabyMonitorTheme
 
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val live by viewModel.live.collectAsStateWithLifecycle()
     HomeContent(
         state = state,
+        live = live,
+        onLiveChange = viewModel::setLive,
         onRefreshNodes = viewModel::refreshNodes,
         onPing = viewModel::pingAll,
         modifier = modifier,
@@ -42,6 +48,8 @@ fun HomeScreen(modifier: Modifier = Modifier, viewModel: HomeViewModel = viewMod
 @Composable
 private fun HomeContent(
     state: HomeUiState,
+    live: LiveState,
+    onLiveChange: (Boolean) -> Unit,
     onRefreshNodes: () -> Unit,
     onPing: () -> Unit,
     modifier: Modifier = Modifier,
@@ -52,7 +60,9 @@ private fun HomeContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("연결 확인", style = MaterialTheme.typography.headlineSmall)
+        Text("베이비 모니터", style = MaterialTheme.typography.headlineSmall)
+
+        LiveCard(live = live, onLiveChange = onLiveChange)
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -108,6 +118,8 @@ private fun HomeContent(
 private fun HomeContentPreview() {
     WatchBabyMonitorTheme {
         HomeContent(
+            live = LiveState(phase = LivePhase.PLAYING, watchName = "Galaxy Watch7", backlogMs = 320, kbps = 256),
+            onLiveChange = {},
             state = HomeUiState(
                 nodes = listOf(NodeInfo("3a1f9c2e", "Galaxy Watch7", isNearby = true)),
                 log = listOf("[22:10:05] Galaxy Watch7: PONG (48 ms)"),
@@ -115,5 +127,44 @@ private fun HomeContentPreview() {
             onRefreshNodes = {},
             onPing = {},
         )
+    }
+}
+
+@Composable
+private fun LiveCard(live: LiveState, onLiveChange: (Boolean) -> Unit) {
+    val on = live.phase != LivePhase.IDLE
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("라이브 듣기", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        when (live.phase) {
+                            LivePhase.IDLE -> "꺼짐"
+                            LivePhase.CONNECTING -> "연결 중…"
+                            LivePhase.PLAYING -> "${live.watchName ?: "워치"} 소리 재생 중"
+                            LivePhase.STALLED -> "소리가 끊겼어요 (기다리는 중)"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (live.phase == LivePhase.STALLED) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                Switch(checked = on, onCheckedChange = onLiveChange)
+            }
+            if (live.phase == LivePhase.PLAYING || live.phase == LivePhase.STALLED) {
+                Text(
+                    "폰 버퍼 ${live.backlogMs} ms · ${live.kbps} kbps\n끊김 ${live.underruns}회 · 재동기화 ${live.resyncs}회 (버림 ${live.droppedMs} ms)",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            live.error?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+        }
     }
 }

@@ -16,6 +16,8 @@ data class MonitorState(
     /** 마지막 알림을 폰에 보낸 노드 수. 0 이면 전달 실패. */
     val lastAlertDelivered: Int? = null,
     val error: String? = null,
+    /** 라이브 오디오를 보내는 중이면 true. */
+    val streaming: Boolean = false,
 )
 
 /**
@@ -41,7 +43,11 @@ object MonitorStatus {
 
     internal fun onError(message: String) = _state.update { it.copy(error = message) }
 
+    internal fun onStreaming(streaming: Boolean) = _state.update {
+        it.copy(streaming = streaming, error = if (streaming) null else it.error)
+    }
+
     internal fun onStopped() = _state.update {
-        it.copy(running = false, dbfs = Constants.Audio.MIN_DBFS)
+        it.copy(running = false, streaming = false, dbfs = Constants.Audio.MIN_DBFS)
     }
 }

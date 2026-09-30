@@ -27,12 +27,29 @@ class ControlReceiver : WearableListenerService() {
                 ControlEvents.onPing(nodeId)
                 Constants.CONTROL_REPLY_PONG
             }
+            ControlCommand.Start -> {
+                // 마이크 포그라운드 서비스는 백그라운드에서 새로 시작할 수 없으므로,
+                // 이미 돌고 있는 모니터링에 스트리밍만 붙인다 (ADR 004)
+                if (MonitorStatus.state.value.running) {
+                    Log.i(TAG, "START streaming to=$nodeId")
+                    StreamRequests.start(nodeId)
+                    Constants.CONTROL_REPLY_OK
+                } else {
+                    Log.w(TAG, "START rejected: monitoring not running")
+                    Constants.CONTROL_REPLY_NOT_MONITORING
+                }
+            }
+            ControlCommand.Stop -> {
+                Log.i(TAG, "STOP streaming from=$nodeId")
+                StreamRequests.stop()
+                Constants.CONTROL_REPLY_OK
+            }
             null -> {
                 Log.w(TAG, "unknown control command (${request.size} bytes) from=$nodeId")
                 "${Constants.CONTROL_REPLY_ERROR_PREFIX}UNKNOWN"
             }
             else -> {
-                // START / STOP / SET_THRESHOLD 는 Phase 3~4 에서 구현
+                // SET_THRESHOLD 는 Phase 6 설정 화면에서 구현
                 Log.w(TAG, "unsupported command=${cmd.encode()} from=$nodeId")
                 "${Constants.CONTROL_REPLY_ERROR_PREFIX}UNSUPPORTED"
             }
