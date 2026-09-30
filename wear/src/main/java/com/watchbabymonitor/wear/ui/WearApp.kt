@@ -45,13 +45,13 @@ import androidx.wear.compose.material.TimeText
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.common.label
 import com.watchbabymonitor.shared.AudioLevel
-import com.watchbabymonitor.wear.AppRole
+import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
-import com.watchbabymonitor.wear.service.ControlEvents
-import com.watchbabymonitor.wear.service.MonitorService
+import com.watchbabymonitor.common.service.ControlEvents
+import com.watchbabymonitor.common.service.MonitorService
 import com.watchbabymonitor.shared.engine.SensorState
-import com.watchbabymonitor.wear.service.Sensor
+import com.watchbabymonitor.common.Engines
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -65,7 +65,7 @@ private val TAG = Constants.logTag("WearApp")
 fun WearApp() {
     val context = LocalContext.current
     val ping by ControlEvents.ping.collectAsState()
-    val monitor by Sensor.engine.state.collectAsState()
+    val monitor by Engines.sensor.state.collectAsState()
     var connected by remember { mutableStateOf("확인 중…") }
 
     fun hasMicPermission() = ContextCompat.checkSelfPermission(
@@ -98,7 +98,7 @@ fun WearApp() {
     }
 
     WearScreen(
-        header = "${AppRole.current.label} · " + if (ping.count == 0) connected else "$connected · PING ${ping.count}",
+        header = "${RoleStore.current(context).label} · " + if (ping.count == 0) connected else "$connected · PING ${ping.count}",
         monitor = monitor,
         micDenied = micDenied,
         onToggle = {

@@ -7,8 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Node
 import com.watchbabymonitor.common.datalayer.ControlClient
-import com.watchbabymonitor.mobile.service.ListenerService
-import com.watchbabymonitor.mobile.service.Receiver
+import com.watchbabymonitor.common.service.ListenerService
+import com.watchbabymonitor.common.Engines
 import com.watchbabymonitor.shared.engine.ReceiverState
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
@@ -43,7 +43,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    val live: StateFlow<ReceiverState> = Receiver.engine.state
+    val live: StateFlow<ReceiverState> = Engines.receiver.state
 
     /** 라이브 듣기 켜기/끄기. 앱이 화면에 있을 때만 호출 (포그라운드 서비스 시작 제한). */
     fun setLive(on: Boolean) {
@@ -53,7 +53,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     init {
         refreshNodes()
         viewModelScope.launch {
-            Receiver.engine.alerts.collect { alert ->
+            Engines.receiver.alerts.collect { alert ->
                 appendLog("소음 알림 ${alert.level.roundToInt()} dB")
             }
         }

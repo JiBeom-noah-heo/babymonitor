@@ -1,4 +1,4 @@
-package com.watchbabymonitor.mobile.notification
+package com.watchbabymonitor.common.notification
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -12,7 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.watchbabymonitor.mobile.MainActivity
+import com.watchbabymonitor.common.DeviceInfo
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
 import java.text.SimpleDateFormat
@@ -49,7 +49,7 @@ object NoiseNotifications {
 
         val openApp = PendingIntent.getActivity(
             context, 0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            DeviceInfo.launchIntent(context),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(alert.ts))

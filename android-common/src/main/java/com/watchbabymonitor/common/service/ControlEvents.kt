@@ -1,4 +1,4 @@
-package com.watchbabymonitor.wear.service
+package com.watchbabymonitor.common.service
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

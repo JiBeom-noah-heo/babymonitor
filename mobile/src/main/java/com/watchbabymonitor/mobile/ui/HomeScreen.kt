@@ -1,5 +1,6 @@
 package com.watchbabymonitor.mobile.ui
 
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.watchbabymonitor.common.label
-import com.watchbabymonitor.mobile.AppRole
+import com.watchbabymonitor.common.RoleStore
 import com.watchbabymonitor.shared.engine.ReceiverState
 import com.watchbabymonitor.shared.engine.StreamPhase
 import com.watchbabymonitor.mobile.ui.theme.WatchBabyMonitorTheme
@@ -62,7 +63,7 @@ private fun HomeContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("베이비 모니터 · ${AppRole.current.label}", style = MaterialTheme.typography.headlineSmall)
+        Text("베이비 모니터 · ${RoleStore.current(LocalContext.current).label}", style = MaterialTheme.typography.headlineSmall)
 
         LiveCard(live = live, onLiveChange = onLiveChange)
 

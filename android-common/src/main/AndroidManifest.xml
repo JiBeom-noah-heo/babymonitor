@@ -1,3 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 권한·서비스 선언은 각 앱 매니페스트에 둔다 (역할별로 필요한 것이 다름) -->
-<manifest />
+<!--
+  두 앱 모두 감지기·수신기가 될 수 있으므로(CLAUDE.md §1) 역할별 권한·서비스를 여기서 한 번에 선언한다.
+  각 앱 매니페스트와 병합된다 (ADR 006).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 감지기: 마이크 + 화면 꺼져도 측정 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 수신기: 라이브 듣기 재생, 알림·진동 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application>
+        <!-- 상대 기기의 /control 요청, /alert 메시지. 앱이 꺼져 있어도 동작 -->
+        <service
+            android:name="com.watchbabymonitor.common.service.DataLayerListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.REQUEST_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/control"
+                    android:scheme="wear" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/alert"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
+        <!-- 감지기: 화면이 꺼져도 마이크 측정 유지 (CLAUDE.md §4-5) -->
+        <service
+            android:name="com.watchbabymonitor.common.service.MonitorService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- 수신기: 라이브 듣기 재생 (ADR 004) -->
+        <service
+            android:name="com.watchbabymonitor.common.service.ListenerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+    </application>
+
+</manifest>

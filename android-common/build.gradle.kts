@@ -25,6 +25,7 @@ dependencies {
     api(project(":shared"))
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
 }

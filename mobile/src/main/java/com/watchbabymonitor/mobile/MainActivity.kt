@@ -1,5 +1,6 @@
 package com.watchbabymonitor.mobile
 
+import com.watchbabymonitor.common.RoleStore
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.watchbabymonitor.mobile.notification.NoiseNotifications
+import com.watchbabymonitor.common.notification.NoiseNotifications
 import com.watchbabymonitor.mobile.ui.HomeScreen
 import com.watchbabymonitor.mobile.ui.theme.WatchBabyMonitorTheme
 import com.watchbabymonitor.shared.Constants
@@ -29,7 +30,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i(TAG, "phone app started, role=${AppRole.current}")
+        Log.i(TAG, "phone app started, role=${RoleStore.current(this)}")
         NoiseNotifications.ensureChannel(this)
         requestNotificationPermissionIfNeeded()
 

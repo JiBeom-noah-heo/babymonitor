@@ -1,4 +1,4 @@
-package com.watchbabymonitor.wear.service
+package com.watchbabymonitor.common.service
 
 import android.Manifest
 import android.app.Notification
@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
@@ -20,8 +21,9 @@ import com.watchbabymonitor.common.audio.AudioCapture
 import com.watchbabymonitor.common.audio.Streamer
 import com.watchbabymonitor.common.datalayer.DataLayerAlertSink
 import com.watchbabymonitor.shared.engine.StreamSinkFactory
-import com.watchbabymonitor.wear.MainActivity
-import com.watchbabymonitor.wear.R
+import com.watchbabymonitor.common.DeviceInfo
+import com.watchbabymonitor.common.Engines
+import com.watchbabymonitor.common.RoleStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +33,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * 감지기 모니터링 서비스: 마이크 → [Sensor.engine]. 판정·알림·스트림 분배는 엔진이 한다.
+ * 감지기 모니터링 서비스: 마이크 → [Engines.sensor]. 판정·알림·스트림 분배는 엔진이 한다.
  * 여기서는 foreground(type=microphone) + PARTIAL WakeLock 으로 화면이 꺼져도 살아 있게만 한다
  * (CLAUDE.md §4-5, §4-6).
  *
@@ -51,13 +53,14 @@ class MonitorService : Service() {
         ensureChannel()
         ServiceCompat.startForeground(
             this, NOTIFICATION_ID, buildNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            // microphone 타입은 API 30+. 폰(minSdk 29)이 감지기일 수 있으므로 29 에서는 타입 없이
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0,
         )
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            Sensor.engine.reportError("마이크 권한 없음")
+            Engines.sensor.reportError("마이크 권한 없음")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -71,10 +74,11 @@ class MonitorService : Service() {
     @Suppress("MissingPermission") // onStartCommand 에서 확인
     private suspend fun monitor() {
         try {
-            Sensor.engine.run(
+            Engines.sensor.run(
                 frames = AudioCapture().frames(),
                 alerts = DataLayerAlertSink(this, AndroidLog("MonitorService")),
                 streams = StreamSinkFactory { nodeId -> Streamer(this, nodeId) },
+                preset = RoleStore.preset(this).value,
             )
         } catch (e: CancellationException) {
             throw e
@@ -108,12 +112,12 @@ class MonitorService : Service() {
 
     private fun buildNotification(): Notification {
         val openApp = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
+            this, 0, DeviceInfo.launchIntent(this),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle(getString(R.string.app_name))
+            .setContentTitle(DeviceInfo.appLabel(this))
             .setContentText("소리 감시 중")
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

@@ -1,4 +1,4 @@
-package com.watchbabymonitor.wear.service
+package com.watchbabymonitor.common.service
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -13,13 +13,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.watchbabymonitor.shared.Constants
-import com.watchbabymonitor.wear.MainActivity
+import com.watchbabymonitor.common.DeviceInfo
 
 private val TAG = Constants.logTag("StartPrompt")
 
 /**
  * 수신기가 원격으로 모니터링 시작(`START`)을 요청했지만 앱이 백그라운드라 마이크를 켤 수 없을 때,
- * "탭해서 모니터링 시작" 알림을 띄운다. 탭하면 [MainActivity] 가 화면에 뜬 상태에서 시작한다.
+ * "탭해서 모니터링 시작" 알림을 띄운다. 탭하면 앱 화면(MainActivity)이 [DeviceInfo.ACTION_START_MONITORING] 으로 열려 시작한다.
  */
 object StartPrompt {
     private const val CHANNEL_ID = "start_request"
@@ -38,9 +38,7 @@ object StartPrompt {
         )
         val open = PendingIntent.getActivity(
             context, 0,
-            Intent(context, MainActivity::class.java)
-                .setAction(MainActivity.ACTION_START_MONITORING)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            DeviceInfo.launchIntent(context, DeviceInfo.ACTION_START_MONITORING),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)

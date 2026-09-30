@@ -1,4 +1,4 @@
-package com.watchbabymonitor.mobile.service
+package com.watchbabymonitor.common.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,8 +15,8 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
-import com.watchbabymonitor.mobile.MainActivity
-import com.watchbabymonitor.mobile.R
+import com.watchbabymonitor.common.DeviceInfo
+import com.watchbabymonitor.common.Engines
 import com.watchbabymonitor.common.audio.AudioPlayer
 import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.shared.Constants
@@ -46,7 +46,7 @@ private val TAG = Constants.logTag("ListenerService")
 
 /**
  * 라이브 듣기: 감지기에 스트리밍 요청 → 감지기가 연 `/audio` 채널을 받아 AudioTrack 으로 재생.
- * 상태·통계·무데이터 판단·사용자 문구는 [Receiver.engine] 이 한다.
+ * 상태·통계·무데이터 판단·사용자 문구는 [Engines.receiver] 이 한다.
  * foreground(type=mediaPlayback) 라 앱을 닫아도 계속 들린다 (ADR 004).
  *
  * 시작 [start] 은 앱 화면에서만 (백그라운드 포그라운드 서비스 시작 제한), 정지 [stop].
@@ -114,7 +114,7 @@ class ListenerService : Service() {
     }
 
     private suspend fun runSession() {
-        val engine = Receiver.engine
+        val engine = Engines.receiver
         engine.sessionStarted()
         var end = StreamEnd.USER_STOPPED
         var detail: String? = null
@@ -168,7 +168,7 @@ class ListenerService : Service() {
 
     /** 채널이 닫히거나 끊길 때까지 재생. 끝난 이유를 돌려준다. */
     private suspend fun play(channel: ChannelClient.Channel): StreamEnd = withContext(Dispatchers.IO) {
-        val engine = Receiver.engine
+        val engine = Engines.receiver
         val input = channelClient.getInputStream(channel).await()
         val player = AudioPlayer()
         engine.channelOpened()
@@ -250,7 +250,7 @@ class ListenerService : Service() {
     private fun buildNotification(): Notification {
         val openApp = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            DeviceInfo.launchIntent(this),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val stop = PendingIntent.getService(
@@ -260,8 +260,8 @@ class ListenerService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText("워치 주변 소리 듣는 중")
+            .setContentTitle(DeviceInfo.appLabel(this))
+            .setContentText("아기 쪽 소리 듣는 중")
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(openApp)
