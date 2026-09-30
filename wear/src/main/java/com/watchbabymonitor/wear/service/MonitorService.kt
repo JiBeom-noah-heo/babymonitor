@@ -15,11 +15,13 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.watchbabymonitor.common.AndroidLog
+import com.watchbabymonitor.common.audio.AudioCapture
+import com.watchbabymonitor.common.audio.Streamer
+import com.watchbabymonitor.common.datalayer.DataLayerAlertSink
 import com.watchbabymonitor.shared.engine.StreamSinkFactory
 import com.watchbabymonitor.wear.MainActivity
 import com.watchbabymonitor.wear.R
-import com.watchbabymonitor.wear.audio.AudioCapture
-import com.watchbabymonitor.wear.audio.Streamer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +73,7 @@ class MonitorService : Service() {
         try {
             Sensor.engine.run(
                 frames = AudioCapture().frames(),
-                alerts = DataLayerAlertSink(this),
+                alerts = DataLayerAlertSink(this, AndroidLog("MonitorService")),
                 streams = StreamSinkFactory { nodeId -> Streamer(this, nodeId) },
             )
         } catch (e: CancellationException) {

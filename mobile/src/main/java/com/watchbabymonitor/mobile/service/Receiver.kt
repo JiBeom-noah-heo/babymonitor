@@ -1,9 +1,7 @@
 package com.watchbabymonitor.mobile.service
 
-import android.util.Log
+import com.watchbabymonitor.common.AndroidLog
 import com.watchbabymonitor.shared.Clock
-import com.watchbabymonitor.shared.Constants
-import com.watchbabymonitor.shared.engine.EngineLog
 import com.watchbabymonitor.shared.engine.ReceiverEngine
 
 /**
@@ -12,18 +10,4 @@ import com.watchbabymonitor.shared.engine.ReceiverEngine
  */
 object Receiver {
     val engine = ReceiverEngine(clock = Clock.MONOTONIC, log = AndroidLog("ListenerService"))
-}
-
-// TODO(refactor 5단계): android-common 으로 옮겨 wear 의 것과 합친다
-class AndroidLog(name: String) : EngineLog {
-    private val tag = Constants.logTag(name)
-    override fun i(msg: String) {
-        Log.i(tag, msg)
-    }
-    override fun w(msg: String, t: Throwable?) {
-        Log.w(tag, msg, t)
-    }
-    override fun e(msg: String, t: Throwable?) {
-        Log.e(tag, msg, t)
-    }
 }

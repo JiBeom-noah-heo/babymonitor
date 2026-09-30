@@ -1,4 +1,4 @@
-package com.watchbabymonitor.mobile.audio
+package com.watchbabymonitor.common.audio
 
 import android.media.AudioAttributes
 import android.media.AudioFormat

@@ -17,7 +17,8 @@ import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.mobile.MainActivity
 import com.watchbabymonitor.mobile.R
-import com.watchbabymonitor.mobile.audio.AudioPlayer
+import com.watchbabymonitor.common.audio.AudioPlayer
+import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
 import com.watchbabymonitor.shared.Pcm16
@@ -54,7 +55,7 @@ class ListenerService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val channelClient by lazy { Wearable.getChannelClient(this) }
-    private val messageClient by lazy { Wearable.getMessageClient(this) }
+    private val control by lazy { ControlClient(this) }
 
     private var session: Job? = null
     private var channelOpened: CompletableDeferred<ChannelClient.Channel>? = null
@@ -121,7 +122,7 @@ class ListenerService : Service() {
         try {
             channelClient.registerChannelCallback(channelCallback).await()
 
-            val node = Wearable.getNodeClient(this).connectedNodes.await().firstOrNull()
+            val node = control.connectedNodes().firstOrNull()
             if (node == null) {
                 end = StreamEnd.NO_PEER
                 return
@@ -133,9 +134,7 @@ class ListenerService : Service() {
             channelOpened = opened
 
             // TODO(refactor 6단계): STREAM_ON 으로 전환 (워치는 임시로 START 를 STREAM_ON 으로 해석)
-            val reply = withTimeout(Constants.CONTROL_REQUEST_TIMEOUT_MS) {
-                messageClient.sendRequest(node.id, Constants.Paths.CONTROL, ControlCommand.Start.toBytes()).await()
-            }.toString(Charsets.UTF_8)
+            val reply = control.send(node.id, ControlCommand.Start)
             Log.i(TAG, "START -> $reply")
             engine.onStreamOnReply(reply)?.let {
                 end = it
@@ -224,10 +223,8 @@ class ListenerService : Service() {
         activeChannel = null
         if (sensorNodeId != null) {
             try {
-                withTimeout(STOP_TIMEOUT_MS) {
-                    // TODO(refactor 6단계): STREAM_OFF 로 전환
-                    messageClient.sendRequest(sensorNodeId, Constants.Paths.CONTROL, ControlCommand.Stop.toBytes()).await()
-                }
+                // TODO(refactor 6단계): STREAM_OFF 로 전환
+                control.send(sensorNodeId, ControlCommand.Stop, STOP_TIMEOUT_MS)
             } catch (e: Exception) {
                 Log.w(TAG, "STOP not delivered", e)
             }

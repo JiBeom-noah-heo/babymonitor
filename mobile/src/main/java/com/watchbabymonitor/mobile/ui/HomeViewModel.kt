@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.wearable.Node
-import com.google.android.gms.wearable.Wearable
+import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.mobile.service.ListenerService
 import com.watchbabymonitor.mobile.service.Receiver
 import com.watchbabymonitor.shared.engine.ReceiverState
@@ -19,8 +19,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,8 +38,7 @@ data class HomeUiState(
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val nodeClient = Wearable.getNodeClient(app)
-    private val messageClient = Wearable.getMessageClient(app)
+    private val control = ControlClient(app)
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -66,7 +63,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(nodesLoading = true) }
             try {
-                val nodes = nodeClient.connectedNodes.await().map { it.toInfo() }
+                val nodes = control.connectedNodes().map { it.toInfo() }
                 Log.i(TAG, "connected nodes: ${nodes.size}")
                 _state.update { it.copy(nodes = nodes) }
             } catch (e: CancellationException) {
@@ -85,7 +82,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(pinging = true) }
             try {
-                val nodes = nodeClient.connectedNodes.await()
+                val nodes = control.connectedNodes()
                 _state.update { it.copy(nodes = nodes.map { n -> n.toInfo() }) }
                 if (nodes.isEmpty()) {
                     appendLog("연결된 워치 없음")
@@ -106,9 +103,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun ping(node: Node) {
         val start = SystemClock.elapsedRealtime()
         try {
-            val reply = withTimeout(Constants.CONTROL_REQUEST_TIMEOUT_MS) {
-                messageClient.sendRequest(node.id, Constants.Paths.CONTROL, ControlCommand.Ping.toBytes()).await()
-            }.toString(Charsets.UTF_8)
+            val reply = control.send(node.id, ControlCommand.Ping)
             val rttMs = SystemClock.elapsedRealtime() - start
             Log.i(TAG, "PING ${node.displayName} -> $reply (${rttMs}ms)")
             appendLog("${node.displayName}: $reply (${rttMs} ms)")

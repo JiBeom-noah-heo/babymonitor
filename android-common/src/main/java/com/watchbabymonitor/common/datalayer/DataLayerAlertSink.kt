@@ -1,19 +1,17 @@
-package com.watchbabymonitor.wear.service
+package com.watchbabymonitor.common.datalayer
 
 import android.content.Context
-import android.util.Log
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.shared.engine.AlertSink
 import com.watchbabymonitor.shared.engine.Delivery
+import com.watchbabymonitor.shared.engine.EngineLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
-private val TAG = Constants.logTag("MonitorService")
-
 /** `/alert` 를 연결된 모든 노드에 MessageClient 로 보낸다. */
-class DataLayerAlertSink(context: Context) : AlertSink {
+class DataLayerAlertSink(context: Context, private val log: EngineLog) : AlertSink {
     private val messageClient = Wearable.getMessageClient(context)
     private val nodeClient = Wearable.getNodeClient(context)
 
@@ -27,7 +25,7 @@ class DataLayerAlertSink(context: Context) : AlertSink {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "sendAlert to ${node.displayName} failed", e)
+                log.e("sendAlert to ${node.displayName} failed", e)
             }
         }
         return Delivery(delivered, nodes.size)

@@ -23,3 +23,4 @@ rootProject.name = "WatchBabyMonitor"
 include(":mobile")
 include(":wear")
 include(":shared")
+include(":android-common")

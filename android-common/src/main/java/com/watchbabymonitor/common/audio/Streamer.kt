@@ -1,4 +1,4 @@
-package com.watchbabymonitor.wear.audio
+package com.watchbabymonitor.common.audio
 
 import android.content.Context
 import android.util.Log
