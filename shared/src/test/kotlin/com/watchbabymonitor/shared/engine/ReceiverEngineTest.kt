@@ -139,6 +139,14 @@ class ReceiverEngineTest {
     }
 
     @Test
+    fun buffering_remoteIsLarger() {
+        assertEquals(Buffering(300, 600), ReceiverEngine.bufferingFor(remote = false))
+        assertEquals(Buffering(1_000, 3_000), ReceiverEngine.bufferingFor(remote = true))
+        assertFalse(ReceiverEngine.shouldResync(started = true, backlogMs = 1_500, maxBacklogMs = 3_000))
+        assertTrue(ReceiverEngine.shouldResync(started = true, backlogMs = 3_001, maxBacklogMs = 3_000))
+    }
+
+    @Test
     fun shouldResync_onlyAfterStart_andOverLimit() {
         assertFalse(ReceiverEngine.shouldResync(started = false, backlogMs = 5_000))
         assertFalse(ReceiverEngine.shouldResync(started = true, backlogMs = 600))

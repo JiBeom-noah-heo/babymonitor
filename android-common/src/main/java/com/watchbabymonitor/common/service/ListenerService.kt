@@ -18,6 +18,8 @@ import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.common.DeviceInfo
 import com.watchbabymonitor.common.Engines
+import com.watchbabymonitor.common.Link
+import com.watchbabymonitor.common.LinkMonitor
 import com.watchbabymonitor.common.audio.AudioPlayer
 import com.watchbabymonitor.common.datalayer.ControlClient
 import com.watchbabymonitor.shared.Constants
@@ -195,7 +197,11 @@ class ListenerService : Service() {
     private suspend fun play(channel: ChannelClient.Channel): Pair<StreamEnd, Long> = withContext(Dispatchers.IO) {
         val engine = Engines.receiver
         val input = channelClient.getInputStream(channel).await()
-        val player = AudioPlayer()
+        // 원격(클라우드)이면 데이터가 몰려 오므로 버퍼를 크게 (Phase 5 측정)
+        val remote = LinkMonitor.state.value.link == Link.REMOTE
+        val buffering = ReceiverEngine.bufferingFor(remote)
+        Log.i(TAG, "buffering remote=$remote prebuffer=${buffering.prebufferMs}ms max=${buffering.maxBacklogMs}ms")
+        val player = AudioPlayer(buffering)
         engine.channelOpened()
         val disconnected = AtomicBoolean(false)
 

@@ -58,6 +58,9 @@ data class ReceiverState(
 /** 재생기(AudioTrack 래퍼)가 알려주는 현재 수치. */
 data class PlaybackStats(val backlogMs: Long, val underruns: Int, val droppedMs: Long, val resyncs: Int)
 
+/** 재생 시작 전 모을 양과 대기량 상한. */
+data class Buffering(val prebufferMs: Int, val maxBacklogMs: Int)
+
 enum class WatchdogAction {
     NONE,
 
@@ -245,8 +248,19 @@ class ReceiverEngine(
             return backoff.coerceAtMost(Constants.Stream.RECONNECT_MAX_DELAY_MS)
         }
 
-        fun shouldResync(started: Boolean, backlogMs: Long): Boolean =
-            started && backlogMs > Constants.Stream.MAX_PLAYBACK_BACKLOG_MS
+        fun shouldResync(
+            started: Boolean,
+            backlogMs: Long,
+            maxBacklogMs: Int = Constants.Stream.MAX_PLAYBACK_BACKLOG_MS,
+        ): Boolean = started && backlogMs > maxBacklogMs
+
+        /** 연결 경로에 맞는 재생 버퍼 (Phase 5). */
+        fun bufferingFor(remote: Boolean): Buffering =
+            if (remote) {
+                Buffering(Constants.Stream.REMOTE_PREBUFFER_MS, Constants.Stream.REMOTE_MAX_PLAYBACK_BACKLOG_MS)
+            } else {
+                Buffering(Constants.Stream.PREBUFFER_MS, Constants.Stream.MAX_PLAYBACK_BACKLOG_MS)
+            }
 
         internal fun messageFor(end: StreamEnd, detail: String?, peer: String): String? = when (end) {
             StreamEnd.USER_STOPPED -> null

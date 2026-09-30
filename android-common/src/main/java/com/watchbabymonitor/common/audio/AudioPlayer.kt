@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.Pcm16
+import com.watchbabymonitor.shared.engine.Buffering
 import com.watchbabymonitor.shared.engine.PlaybackStats
 import com.watchbabymonitor.shared.engine.ReceiverEngine
 
@@ -15,8 +16,8 @@ private val TAG = Constants.logTag("AudioPlayer")
 /**
  * 16kHz mono PCM16(LE) 스트림 재생용 AudioTrack 래퍼.
  *
- * - 처음(그리고 재동기화 후) [Constants.Stream.PREBUFFER_MS] 만큼 모은 뒤 재생 시작
- * - 재생 대기량이 [Constants.Stream.MAX_PLAYBACK_BACKLOG_MS] 를 넘으면 트랙에 쌓인 **오래된** 소리를
+ * - 처음(그리고 재동기화 후) [Buffering.prebufferMs] 만큼 모은 뒤 재생 시작
+ * - 재생 대기량이 [Buffering.maxBacklogMs] 를 넘으면 트랙에 쌓인 **오래된** 소리를
  *   버리고(트랙 재생성) 최신 소리부터 다시 재생한다 → 지연이 쌓이지 않음
  *   (pause+flush 는 재생 위치가 play() 이후에야 0 으로 바뀌어 대기량 계산이 어긋남)
  *
@@ -25,10 +26,11 @@ private val TAG = Constants.logTag("AudioPlayer")
  *
  * 한 스레드에서만 호출한다.
  */
-class AudioPlayer {
+/** @param buffering 연결 경로별 버퍼 ([ReceiverEngine.bufferingFor]). 근거리 0.3/0.6초, 원격 1/3초 */
+class AudioPlayer(private val buffering: Buffering = ReceiverEngine.bufferingFor(remote = false)) {
 
     private var track: AudioTrack = newTrack()
-    private val prebufferBytes = Pcm16.msToBytes(Constants.Stream.PREBUFFER_MS)
+    private val prebufferBytes = Pcm16.msToBytes(buffering.prebufferMs)
 
     // 현재 트랙에 쓴 바이트
     private var writtenBytes = 0L
@@ -53,7 +55,7 @@ class AudioPlayer {
         val minBytes = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL, ENCODING)
         check(minBytes > 0) { "AudioTrack.getMinBufferSize failed: $minBytes" }
         // 대기량 상한보다 넉넉하게 → write 가 막히지 않음
-        val bufferBytes = maxOf(minBytes * 2, Pcm16.msToBytes(Constants.Stream.MAX_PLAYBACK_BACKLOG_MS * 2))
+        val bufferBytes = maxOf(minBytes * 2, Pcm16.msToBytes(buffering.maxBacklogMs * 2))
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -80,13 +82,13 @@ class AudioPlayer {
         // AudioFlinger 는 기본적으로 버퍼가 "가득" 찰 때까지 재생을 시작하지 않는다.
         // 대기량 상한(0.6초)이 버퍼(1.2초)보다 작아서 영영 시작 안 되고 BUFFER TIMEOUT 으로
         // 비활성화됐음 → prebuffer 만큼만 차면 시작하도록 (devlog Phase 4)
-        val prebufferFrames = Pcm16.msToBytes(Constants.Stream.PREBUFFER_MS) / Constants.Audio.BYTES_PER_SAMPLE
+        val prebufferFrames = Pcm16.msToBytes(buffering.prebufferMs) / Constants.Audio.BYTES_PER_SAMPLE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             track.setStartThresholdInFrames(prebufferFrames)
         } else {
             // API 29~30: 시작 기준을 못 바꾸므로 유효 버퍼를 대기량 상한으로 줄임
             track.setBufferSizeInFrames(
-                Pcm16.msToBytes(Constants.Stream.MAX_PLAYBACK_BACKLOG_MS) / Constants.Audio.BYTES_PER_SAMPLE,
+                Pcm16.msToBytes(buffering.maxBacklogMs) / Constants.Audio.BYTES_PER_SAMPLE,
             )
         }
         return track
@@ -131,7 +133,7 @@ class AudioPlayer {
         }
         if (size == 0) return
 
-        if (ReceiverEngine.shouldResync(started, backlogMs)) resync()
+        if (ReceiverEngine.shouldResync(started, backlogMs, buffering.maxBacklogMs)) resync()
 
         val written = track.write(scratch, 0, size, AudioTrack.WRITE_BLOCKING)
         check(written >= 0) { "AudioTrack.write error: $written" }

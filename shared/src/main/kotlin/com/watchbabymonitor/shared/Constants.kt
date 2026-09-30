@@ -113,6 +113,13 @@ object Constants {
         /** 폰 재생 대기량이 이보다 많으면 받은 데이터를 버려서 따라잡는다. */
         const val MAX_PLAYBACK_BACKLOG_MS = 600
 
+        /**
+         * 원격(클라우드 경유) 연결일 때. 데이터가 1~2초씩 몰려 와서 근거리 기준(0.6초)이면
+         * 받은 소리의 84% 를 버렸다 (Phase 5 측정) → 지연 1~3초를 감수 (CLAUDE.md §3).
+         */
+        const val REMOTE_PREBUFFER_MS = 1_000
+        const val REMOTE_MAX_PLAYBACK_BACKLOG_MS = 3_000
+
         /** 이 시간 동안 데이터가 없으면 "끊김" 표시. */
         const val STALL_TIMEOUT_MS = 2_000L
 
