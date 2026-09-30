@@ -93,19 +93,17 @@
 ### 모듈 구조
 ```
 WatchBabyMonitor/
-├── mobile/          # 폰 앱
-│   └── src/main/java/.../mobile/
-│       ├── ui/            # Compose 화면 (Home, Settings)
-│       ├── service/       # ListenerService (foreground), WearMessageReceiver
-│       └── notification/  # 알림 채널, 알림 빌더
-├── wear/            # 워치 앱
-│   └── src/main/java/.../wear/
-│       ├── ui/            # Compose for Wear OS 화면
-│       └── service/       # MonitorService (foreground), ControlReceiver
-├── android-common/  # 두 앱이 함께 쓰는 Android 어댑터 (Android 라이브러리, ADR 005)
+├── mobile/          # 폰 앱: 화면(Compose), Application
+│   └── src/main/java/.../mobile/ui/
+├── wear/            # 워치 앱: 화면(Compose for Wear OS), Application
+│   └── src/main/java/.../wear/ui/
+├── android-common/  # 두 앱이 함께 쓰는 Android 코드 (Android 라이브러리, ADR 005·006)
 │   └── src/main/java/.../common/
 │       ├── audio/         # AudioCapture(마이크), Streamer(채널 송신), AudioPlayer(AudioTrack)
-│       └── datalayer/     # MessageClient/ChannelClient/NodeClient 래퍼
+│       ├── datalayer/     # ControlClient, DataLayerAlertSink, StatusSync(/status)
+│       ├── service/       # MonitorService(감지기 FGS), ListenerService(수신기 FGS), DataLayerListenerService, StartPrompt
+│       ├── notification/  # NoiseNotifications(폰 heads-up), WatchAlert(워치 진동+화면 켜기)
+│       └── Engines, RoleStore, RoleControl, StatusHub   # 엔진 보관, 역할·프리셋 저장, /status 동기화
 ├── shared/          # 순수 Kotlin: 상수, 데이터 모델, 경로, 엔진 (Android 의존성 없음)
 │   ├── Role.kt            # SENSOR / RECEIVER
 │   ├── SensorEngine.kt    # dB 계산, 임계값 판정, debounce, 스트림 분배
