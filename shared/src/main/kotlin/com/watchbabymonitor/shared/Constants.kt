@@ -35,8 +35,17 @@ object Constants {
     /** 알 수 없는 / 아직 지원하지 않는 명령에 대한 응답 접두사. */
     const val CONTROL_REPLY_ERROR_PREFIX = "ERR:"
 
-    /** START 를 받았지만 워치 모니터링이 꺼져 있음 (ADR 004). */
+    /** STREAM_ON 을 받았지만 감지기 모니터링이 꺼져 있음 (ADR 004). */
     const val CONTROL_REPLY_NOT_MONITORING = "${CONTROL_REPLY_ERROR_PREFIX}NOT_MONITORING"
+
+    /** START 를 받았지만 감지기 앱이 백그라운드라 마이크를 켤 수 없음 → 감지기 기기에서 사용자가 눌러야 함. */
+    const val CONTROL_REPLY_NEEDS_USER = "${CONTROL_REPLY_ERROR_PREFIX}NEEDS_USER"
+
+    /** 알 수 없는 명령. */
+    const val CONTROL_REPLY_UNKNOWN = "${CONTROL_REPLY_ERROR_PREFIX}UNKNOWN"
+
+    /** 이 역할에서 처리하지 않는 명령 (예: 수신기에 STREAM_ON). */
+    const val CONTROL_REPLY_UNSUPPORTED = "${CONTROL_REPLY_ERROR_PREFIX}UNSUPPORTED"
 
     /** 폰 → 워치 요청 응답 대기 시간. */
     const val CONTROL_REQUEST_TIMEOUT_MS = 5_000L
