@@ -6,11 +6,12 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.WearableListenerService
 import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.ControlCommand
+import com.watchbabymonitor.shared.engine.ControlEffect
 
 private val TAG = Constants.logTag("ControlReceiver")
 
 /**
- * 폰에서 오는 `/control` 요청(MessageClient.sendRequest)을 받아 응답한다.
+ * 수신기에서 오는 `/control` 요청(MessageClient.sendRequest)을 [Sensor.engine] 으로 넘기고 응답한다.
  * 앱이 꺼져 있어도 Play Services 가 이 서비스를 깨운다.
  */
 class ControlReceiver : WearableListenerService() {
@@ -21,39 +22,26 @@ class ControlReceiver : WearableListenerService() {
             return null
         }
 
-        val reply = when (val cmd = ControlCommand.fromBytes(request)) {
-            ControlCommand.Ping -> {
-                Log.i(TAG, "PING from=$nodeId -> PONG")
-                ControlEvents.onPing(nodeId)
-                Constants.CONTROL_REPLY_PONG
-            }
-            ControlCommand.Start -> {
-                // 마이크 포그라운드 서비스는 백그라운드에서 새로 시작할 수 없으므로,
-                // 이미 돌고 있는 모니터링에 스트리밍만 붙인다 (ADR 004)
-                if (MonitorStatus.state.value.running) {
-                    Log.i(TAG, "START streaming to=$nodeId")
-                    StreamRequests.start(nodeId)
-                    Constants.CONTROL_REPLY_OK
-                } else {
-                    Log.w(TAG, "START rejected: monitoring not running")
-                    Constants.CONTROL_REPLY_NOT_MONITORING
-                }
-            }
-            ControlCommand.Stop -> {
-                Log.i(TAG, "STOP streaming from=$nodeId")
-                StreamRequests.stop()
-                Constants.CONTROL_REPLY_OK
-            }
-            null -> {
-                Log.w(TAG, "unknown control command (${request.size} bytes) from=$nodeId")
-                "${Constants.CONTROL_REPLY_ERROR_PREFIX}UNKNOWN"
-            }
-            else -> {
-                // SET_THRESHOLD 는 Phase 6 설정 화면에서 구현
-                Log.w(TAG, "unsupported command=${cmd.encode()} from=$nodeId")
-                "${Constants.CONTROL_REPLY_ERROR_PREFIX}UNSUPPORTED"
-            }
+        val cmd = legacyToStream(ControlCommand.fromBytes(request))
+        if (cmd == ControlCommand.Ping) ControlEvents.onPing(nodeId)
+
+        // TODO(refactor 6단계): 원격 START 로 모니터링 시작 (앱이 화면에 있을 때만) + 사용자 알림
+        val result = Sensor.engine.onControl(cmd, nodeId, canStartMonitoring = false)
+        Log.i(TAG, "${cmd?.encode() ?: "UNKNOWN(${request.size}B)"} from=$nodeId -> ${result.reply}")
+        when (result.effect) {
+            ControlEffect.STOP_MONITORING -> MonitorService.stop(this)
+            ControlEffect.START_MONITORING, ControlEffect.PROMPT_USER_TO_START, null -> Unit
         }
-        return Tasks.forResult(reply.toByteArray(Charsets.UTF_8))
+        return Tasks.forResult(result.reply.toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * TODO(refactor 6단계에서 제거): 폰은 아직 스트리밍 제어에 START/STOP 을 보낸다.
+     * 폰이 STREAM_ON/OFF 로 바뀌기 전까지 옛 의미로 해석.
+     */
+    private fun legacyToStream(cmd: ControlCommand?): ControlCommand? = when (cmd) {
+        ControlCommand.Start -> ControlCommand.StreamOn
+        ControlCommand.Stop -> ControlCommand.StreamOff
+        else -> cmd
     }
 }

@@ -48,8 +48,8 @@ import com.watchbabymonitor.shared.Constants
 import com.watchbabymonitor.shared.NoiseAlert
 import com.watchbabymonitor.wear.service.ControlEvents
 import com.watchbabymonitor.wear.service.MonitorService
-import com.watchbabymonitor.wear.service.MonitorState
-import com.watchbabymonitor.wear.service.MonitorStatus
+import com.watchbabymonitor.shared.engine.SensorState
+import com.watchbabymonitor.wear.service.Sensor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -63,7 +63,7 @@ private val TAG = Constants.logTag("WearApp")
 fun WearApp() {
     val context = LocalContext.current
     val ping by ControlEvents.ping.collectAsState()
-    val monitor by MonitorStatus.state.collectAsState()
+    val monitor by Sensor.engine.state.collectAsState()
     var connected by remember { mutableStateOf("확인 중…") }
 
     fun hasMicPermission() = ContextCompat.checkSelfPermission(
@@ -120,7 +120,7 @@ private fun requiredPermissions(): Array<String> =
 @Composable
 private fun WearScreen(
     header: String,
-    monitor: MonitorState,
+    monitor: SensorState,
     micDenied: Boolean,
     onToggle: () -> Unit,
 ) {
@@ -202,12 +202,15 @@ private fun LevelBar(dbfs: Float, thresholdDbfs: Float) {
 }
 
 @Composable
-private fun StatusLine(monitor: MonitorState, micDenied: Boolean) {
+private fun StatusLine(monitor: SensorState, micDenied: Boolean) {
+    // shared 모듈 타입이라 스마트 캐스트가 안 됨 → 지역 변수로
+    val error = monitor.error
+    val lastAlert = monitor.lastAlert
     val (text, isError) = when {
         micDenied -> "마이크 권한이 필요해요" to true
-        monitor.error != null -> monitor.error to true
+        error != null -> error to true
         monitor.streaming -> "폰으로 소리 보내는 중" to false
-        monitor.lastAlert != null -> alertSummary(monitor.alertCount, monitor.lastAlert, monitor.lastAlertDelivered) to false
+        lastAlert != null -> alertSummary(monitor.alertCount, lastAlert, monitor.lastAlertDelivered) to false
         monitor.running -> "기준 ${monitor.thresholdDbfs.roundToInt()} dB" to false
         else -> "정지됨" to false
     }
@@ -235,7 +238,7 @@ private fun alertSummary(count: Int, alert: NoiseAlert, delivered: Int?): String
 private fun WearScreenPreview() {
     WearScreen(
         header = "Galaxy S25 · PING 3",
-        monitor = MonitorState(running = true, dbfs = -28f, alertCount = 2, lastAlert = NoiseAlert(-18f, 0L), lastAlertDelivered = 1),
+        monitor = SensorState(running = true, dbfs = -28f, alertCount = 2, lastAlert = NoiseAlert(-18f, 0L), lastAlertDelivered = 1),
         micDenied = false,
         onToggle = {},
     )
