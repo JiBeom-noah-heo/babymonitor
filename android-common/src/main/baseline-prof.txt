@@ -1,0 +1,10 @@
+# Baseline profile (ADR 009): 설치 직후부터 미리 컴파일할 코드.
+# 감지기 모니터링 중 계속 도는 경로 = 오디오 캡처 → 레벨·판정 엔진 → 알림·스트림·상태 발행.
+# 앱 코드는 작아서 전부 넣는다. 라이브러리 중에서는 루프에서 쓰는 코루틴과 /status JSON 만.
+# (Compose 등은 라이브러리가 자기 프로필을 같이 싣고 온다)
+HSPLcom/watchbabymonitor/**;->**(**)**
+Lcom/watchbabymonitor/**;
+HSPLkotlinx/coroutines/**;->**(**)**
+Lkotlinx/coroutines/**;
+HSPLkotlinx/serialization/json/**;->**(**)**
+Lkotlinx/serialization/json/**;

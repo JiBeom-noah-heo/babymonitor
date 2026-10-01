@@ -27,6 +27,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
 
