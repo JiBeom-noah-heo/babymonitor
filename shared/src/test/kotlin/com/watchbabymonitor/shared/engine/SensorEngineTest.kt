@@ -105,7 +105,7 @@ class SensorEngineTest {
         assertTrue(e.state.value.running)
         input.send(quiet)
         runCurrent()
-        assertEquals(-55f, e.state.value.dbfs, 0.5f)
+        assertEquals(-55f, e.level.value, 0.5f)
     }
 
     @Test
@@ -396,6 +396,25 @@ class SensorEngineTest {
         e.setConfig(DetectionConfig(thresholdDbfs = -10f))
         startEngine(e)
         assertEquals(-10f, e.state.value.thresholdDbfs, 0f)
+    }
+
+    @Test
+    fun levelChanges_doNotChangeState() = runTest {
+        // 상태 수집기가 100ms 마다 깨어나지 않도록, 레벨은 state 를 바꾸지 않는다
+        val e = engine()
+        val input = startEngine(e)
+        val before = e.state.value
+        repeat(5) { input.send(if (it % 2 == 0) loud else quiet) } // 마지막은 loud
+        runCurrent()
+        assertTrue(before === e.state.value)
+        assertEquals(-20f, e.level.value, 0.5f)
+    }
+
+    @Test
+    fun levelResetsWhenStopped() = runTest {
+        val e = engine()
+        e.run(flow { emit(loud) }, FakeAlerts(), FakeStreams())
+        assertEquals(Constants.Audio.MIN_DBFS, e.level.value, 0f)
     }
 
     @Test

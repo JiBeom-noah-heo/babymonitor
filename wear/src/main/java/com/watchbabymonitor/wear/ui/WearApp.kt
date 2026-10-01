@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
@@ -69,6 +69,8 @@ import com.watchbabymonitor.shared.engine.ReceiverState
 import com.watchbabymonitor.shared.engine.SensorState
 import com.watchbabymonitor.shared.engine.StreamPhase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,15 +82,20 @@ private val TAG = Constants.logTag("WearApp")
 @Composable
 fun WearApp() {
     val context = LocalContext.current
-    val ping by ControlEvents.ping.collectAsState()
-    val role by RoleStore.role(context).collectAsState()
-    val config by RoleStore.config(context).collectAsState()
+    // 화면이 보일 때만 수집 (collectAsStateWithLifecycle). 예전엔 화면이 꺼져도 100ms 마다 상태를 받아
+    // 메인 스레드가 71분 중 24분 일했다 (배터리 분석, 2026-10-01)
+    val ping by ControlEvents.ping.collectAsStateWithLifecycle()
+    val role by RoleStore.role(context).collectAsStateWithLifecycle()
+    val config by RoleStore.config(context).collectAsStateWithLifecycle()
     val preset = config.preset
-    val sensor by Engines.sensor.state.collectAsState()
-    val receiver by Engines.receiver.state.collectAsState()
-    val peer by StatusHub.peer.collectAsState()
-    val link by LinkMonitor.state.collectAsState()
-    val receiverPrefs by RoleStore.receiverPrefs(context).collectAsState()
+    val sensor by Engines.sensor.state.collectAsStateWithLifecycle()
+    @OptIn(FlowPreview::class)
+    val levelFlow = remember { Engines.sensor.level.sample(Constants.Audio.UI_LEVEL_INTERVAL_MS) }
+    val level by levelFlow.collectAsStateWithLifecycle(Constants.Audio.MIN_DBFS)
+    val receiver by Engines.receiver.state.collectAsStateWithLifecycle()
+    val peer by StatusHub.peer.collectAsStateWithLifecycle()
+    val link by LinkMonitor.state.collectAsStateWithLifecycle()
+    val receiverPrefs by RoleStore.receiverPrefs(context).collectAsStateWithLifecycle()
     var connected by remember { mutableStateOf("확인 중…") }
 
     fun granted(permission: String) =
@@ -125,6 +132,7 @@ fun WearApp() {
         peer = peer,
         link = link.link,
         sensor = sensor,
+        level = level,
         preset = preset,
         receiver = receiver,
         micDenied = micDenied,
@@ -177,6 +185,7 @@ private fun WearScreen(
     peer: DeviceStatus?,
     link: Link,
     sensor: SensorState,
+    level: Float,
     preset: DetectionPreset,
     receiver: ReceiverState,
     micDenied: Boolean,
@@ -220,7 +229,7 @@ private fun WearScreen(
                     }
                 }
                 when (role) {
-                    Role.SENSOR -> sensorItems(sensor, preset, micDenied, onMonitoringToggle, onPresetToggle, onOpenSettings)
+                    Role.SENSOR -> sensorItems(sensor, level, preset, micDenied, onMonitoringToggle, onPresetToggle, onOpenSettings)
                     Role.RECEIVER -> receiverItems(receiver, peer, onLiveToggle, receiverPrefs, onReceiverPrefs)
                 }
                 item {
@@ -257,6 +266,7 @@ private fun Caption(text: String) {
 /** 감지기: 레벨, 시작/정지, 감지 조건. */
 private fun ScalingLazyListScope.sensorItems(
     sensor: SensorState,
+    level: Float,
     preset: DetectionPreset,
     micDenied: Boolean,
     onMonitoringToggle: () -> Unit,
@@ -265,14 +275,14 @@ private fun ScalingLazyListScope.sensorItems(
 ) {
     item {
         Text(
-            text = if (sensor.running && sensor.dbfs > Constants.Audio.MIN_DBFS) "${sensor.dbfs.roundToInt()} dB" else "—",
+            text = if (sensor.running && level > Constants.Audio.MIN_DBFS) "${level.roundToInt()} dB" else "—",
             style = MaterialTheme.typography.title1,
             color = if (sensor.running) MaterialTheme.colors.primary else MaterialTheme.colors.onSurfaceVariant,
         )
     }
     item {
         LevelBar(
-            dbfs = if (sensor.running) sensor.dbfs else Constants.Audio.MIN_DBFS,
+            dbfs = if (sensor.running) level else Constants.Audio.MIN_DBFS,
             thresholdDbfs = sensor.thresholdDbfs,
         )
     }
@@ -375,7 +385,7 @@ private fun ScalingLazyListScope.receiverItems(
 private fun LevelBar(dbfs: Float, thresholdDbfs: Float) {
     val fraction by animateFloatAsState(
         targetValue = AudioLevel.normalize(dbfs),
-        animationSpec = tween(durationMillis = Constants.Audio.LEVEL_WINDOW_MS),
+        animationSpec = tween(durationMillis = Constants.Audio.UI_LEVEL_INTERVAL_MS.toInt()),
         label = "level",
     )
     val over = dbfs >= thresholdDbfs
@@ -445,6 +455,7 @@ private fun ReceiverPreview() {
         peer = DeviceStatus(role = Role.SENSOR, monitoring = true, batteryPercent = 80, ts = 0L),
         link = Link.NEARBY,
         sensor = SensorState(),
+        level = -40f,
         preset = DetectionPreset.CAR,
         receiver = ReceiverState(alertCount = 2, lastAlert = NoiseAlert(-18f, 0L)),
         micDenied = false,

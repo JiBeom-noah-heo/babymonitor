@@ -65,6 +65,7 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val live by viewModel.live.collectAsStateWithLifecycle()
     val sensor by viewModel.sensor.collectAsStateWithLifecycle()
+    val level by viewModel.level.collectAsStateWithLifecycle()
     val role by viewModel.role.collectAsStateWithLifecycle()
     val config by viewModel.config.collectAsStateWithLifecycle()
     val preset = config.preset
@@ -84,6 +85,7 @@ fun HomeScreen(
         link = link,
         onRoleChange = viewModel::setRole,
         sensor = sensor,
+        level = level,
         preset = preset,
         micDenied = micDenied,
         onMonitoringChange = { on ->
@@ -114,6 +116,7 @@ private fun HomeContent(
     link: LinkState,
     onRoleChange: (Role) -> Unit,
     sensor: SensorState,
+    level: Float,
     preset: DetectionPreset,
     micDenied: Boolean,
     onMonitoringChange: (Boolean) -> Unit,
@@ -143,7 +146,7 @@ private fun HomeContent(
         item { RoleCard(role = role, peer = peer, link = link, onRoleChange = onRoleChange) }
         when (role) {
             Role.SENSOR -> item {
-                SensorCard(sensor, preset, micDenied, onMonitoringChange, onPresetChange)
+                SensorCard(sensor, level, preset, micDenied, onMonitoringChange, onPresetChange)
             }
             Role.RECEIVER -> {
                 item { RemoteCard(peer = peer, alerts = live, onRemoteMonitoring = onRemoteMonitoring) }
@@ -228,6 +231,7 @@ private fun peerSummary(peer: DeviceStatus?): String {
 @Composable
 private fun SensorCard(
     sensor: SensorState,
+    level: Float,
     preset: DetectionPreset,
     micDenied: Boolean,
     onMonitoringChange: (Boolean) -> Unit,
@@ -252,12 +256,12 @@ private fun SensorCard(
             }
             if (sensor.running) {
                 Text(
-                    if (sensor.dbfs > Constants.Audio.MIN_DBFS) "${sensor.dbfs.roundToInt()} dB" else "—",
+                    if (level > Constants.Audio.MIN_DBFS) "${level.roundToInt()} dB" else "—",
                     style = MaterialTheme.typography.headlineMedium,
-                    color = if (sensor.dbfs >= sensor.thresholdDbfs) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    color = if (level >= sensor.thresholdDbfs) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
                 LinearProgressIndicator(
-                    progress = { AudioLevel.normalize(sensor.dbfs) },
+                    progress = { AudioLevel.normalize(level) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -392,6 +396,7 @@ private fun HomeContentPreview() {
             link = LinkState(Link.NEARBY),
             onRoleChange = {},
             sensor = SensorState(),
+            level = -40f,
             preset = DetectionPreset.HOME,
             micDenied = false,
             onMonitoringChange = {},

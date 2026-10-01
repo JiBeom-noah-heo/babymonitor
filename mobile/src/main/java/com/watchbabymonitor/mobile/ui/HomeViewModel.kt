@@ -30,7 +30,9 @@ import com.watchbabymonitor.shared.ControlCommand
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +64,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     val live: StateFlow<ReceiverState> = Engines.receiver.state
     val sensor: StateFlow<SensorState> = Engines.sensor.state
+
+    /** 화면용 레벨: 판정은 100ms, 표시는 [Constants.Audio.UI_LEVEL_INTERVAL_MS] 마다. 화면이 안 보이면 수집 안 함. */
+    @OptIn(FlowPreview::class)
+    val level: StateFlow<Float> = Engines.sensor.level
+        .sample(Constants.Audio.UI_LEVEL_INTERVAL_MS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Constants.Audio.MIN_DBFS)
     val role: StateFlow<Role> = RoleStore.role(app)
     /** 이 기기가 감지기일 때의 감지 설정. */
     val config: StateFlow<DetectionConfig> = RoleStore.config(app)

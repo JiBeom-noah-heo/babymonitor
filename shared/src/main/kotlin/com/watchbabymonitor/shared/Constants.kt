@@ -76,6 +76,9 @@ object Constants {
 
         /** 레벨 바 표시 범위의 하한. 이보다 작으면 바가 비어 있음. */
         const val DISPLAY_FLOOR_DBFS = -80f
+
+        /** 화면의 레벨 숫자·바 갱신 간격. 판정은 100ms 그대로, 표시만 덜 자주 (배터리, 2026-10-01). */
+        const val UI_LEVEL_INTERVAL_MS = 250L
     }
 
     /** 소음 알림 판정 (CLAUDE.md §4-3, ADR 003). */

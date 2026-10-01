@@ -23,9 +23,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
+/**
+ * 감지기 상태. **이벤트가 있을 때만** 바뀐다 (시작·정지, 알림, 설정, 스트리밍, 오류, 마이크 막힘).
+ * 100ms 마다 바뀌는 레벨은 [SensorEngine.level] 로 분리 — 상태 수집기(/status 발행, 기록, 설정 저장)가
+ * 초당 10번 깨어나지 않게 (배터리 분석, 2026-10-01).
+ */
 data class SensorState(
     val running: Boolean = false,
-    val dbfs: Float = Constants.Audio.MIN_DBFS,
     /** 현재 감지 설정 (프리셋 + 사용자 조정, Phase 6). */
     val config: DetectionConfig = DetectionConfig(),
     val alertCount: Int = 0,
@@ -71,6 +75,11 @@ class SensorEngine(
 ) {
     private val _state = MutableStateFlow(SensorState())
     val state: StateFlow<SensorState> = _state.asStateFlow()
+
+    private val _level = MutableStateFlow(Constants.Audio.MIN_DBFS)
+
+    /** 현재 레벨 (dBFS), 100ms 마다. 화면은 표시 간격에 맞춰 덜 자주 읽는다. */
+    val level: StateFlow<Float> = _level.asStateFlow()
 
     // run 중에만 유효. onControl 은 다른 스레드(Data Layer 리스너)에서 온다.
     @Volatile
@@ -142,7 +151,7 @@ class SensorEngine(
                 }
 
                 val dbfs = AudioLevel.dbfs(frame)
-                _state.update { it.copy(dbfs = dbfs) }
+                _level.value = dbfs
 
                 // 실제 방 소리는 완전한 0 이 아니다. 0 이 이어지면 마이크를 뺏긴 것 (통화 중 등)
                 if (dbfs <= Constants.Audio.MIN_DBFS) silentFrames++ else silentFrames = 0
@@ -179,8 +188,9 @@ class SensorEngine(
             stopStream()
             runScope = null
             streamSinks = null
+            _level.value = Constants.Audio.MIN_DBFS
             _state.update {
-                it.copy(running = false, streaming = false, micMuted = false, dbfs = Constants.Audio.MIN_DBFS)
+                it.copy(running = false, streaming = false, micMuted = false)
             }
             log.i("monitoring stopped")
         }
