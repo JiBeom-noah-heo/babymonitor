@@ -20,6 +20,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // TODO(출시 전): 전용 릴리스 키스토어로 교체. Data Layer 는 두 앱 서명이 같아야 하므로 둘 다 같은 키.
+            // 지금은 배터리·성능 측정용으로 디버그 키 서명 (debuggable=false 인 빌드가 필요해서)
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
