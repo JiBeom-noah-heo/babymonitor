@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -143,7 +144,13 @@ private fun HomeContent(
                 TextButton(onClick = onOpenSettings) { Text("설정") }
             }
         }
-        item { RoleCard(role = role, peer = peer, link = link, onRoleChange = onRoleChange) }
+        item {
+            val busy = when (role) {
+                Role.SENSOR -> sensor.running
+                Role.RECEIVER -> live.phase != StreamPhase.IDLE
+            }
+            RoleCard(role = role, peer = peer, link = link, busy = busy, onRoleChange = onRoleChange)
+        }
         when (role) {
             Role.SENSOR -> item {
                 SensorCard(sensor, level, preset, micDenied, onMonitoringChange, onPresetChange)
@@ -161,9 +168,14 @@ private fun HomeContent(
     }
 }
 
-/** 역할 선택 + 상대 기기 상태 + 역할 충돌 경고 (CLAUDE.md §1, §3). */
+/**
+ * 역할 선택 + 상대 기기 상태 + 역할 충돌 경고 (CLAUDE.md §1, §3).
+ * 역할은 확인 창을 거쳐서만 바꾸고, 모니터링·라이브 듣기 중([busy])에는 잠근다 —
+ * 실수로 한 번 눌려 역할이 바뀌면 경고 하나만 남고 알림이 끊긴다 (2026-10-01 워치에서 실제로 일어남).
+ */
 @Composable
-private fun RoleCard(role: Role, peer: DeviceStatus?, link: LinkState, onRoleChange: (Role) -> Unit) {
+private fun RoleCard(role: Role, peer: DeviceStatus?, link: LinkState, busy: Boolean, onRoleChange: (Role) -> Unit) {
+    var pending by remember { mutableStateOf<Role?>(null) }
     val conflict = peer != null && Role.conflicts(role, peer.role)
     val warnings = peerWarnings(role, peer, link)
     Card(
@@ -180,10 +192,18 @@ private fun RoleCard(role: Role, peer: DeviceStatus?, link: LinkState, onRoleCha
                 Role.entries.forEach { r ->
                     FilterChip(
                         selected = r == role,
-                        onClick = { onRoleChange(r) },
+                        onClick = { if (r != role) pending = r },
+                        enabled = !busy || r == role,
                         label = { Text(if (r == Role.SENSOR) "감지기 (아이 옆)" else "수신기 (부모)") },
                     )
                 }
+            }
+            if (busy) {
+                Text(
+                    "${if (role == Role.SENSOR) "모니터링" else "라이브 듣기"}을 멈추면 역할을 바꿀 수 있어요",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Text(linkSummary(link), style = MaterialTheme.typography.bodyMedium)
             Text(peerSummary(peer), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -197,6 +217,20 @@ private fun RoleCard(role: Role, peer: DeviceStatus?, link: LinkState, onRoleCha
             }
         }
     }
+    pending?.let { next ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("${next.label}로 바꿀까요?") },
+            text = { Text(roleChangeMessage(next)) },
+            confirmButton = { TextButton(onClick = { pending = null; onRoleChange(next) }) { Text("바꾸기") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("취소") } },
+        )
+    }
+}
+
+private fun roleChangeMessage(next: Role): String = when (next) {
+    Role.SENSOR -> "이 폰을 아이 옆에 두고 소리를 감지해요. 워치는 수신기여야 알림을 받아요."
+    Role.RECEIVER -> "이 폰으로 알림을 받아요. 워치는 감지기여야 소리를 감지해요."
 }
 
 /** 연결 경로 (CLAUDE.md §3): 근처 = 블루투스, 원격 = 클라우드 경유. */

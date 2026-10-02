@@ -41,11 +41,14 @@ import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.dialog.Alert
+import androidx.wear.compose.material.dialog.Dialog
 import androidx.wear.compose.material.scrollAway
 import com.google.android.gms.wearable.Wearable
 import com.watchbabymonitor.common.Engines
@@ -198,6 +201,12 @@ private fun WearScreen(
     onRoleToggle: () -> Unit,
 ) {
     val listState = rememberScalingLazyListState()
+    // 역할은 확인 창을 거쳐서만, 모니터링·라이브 듣기 중에는 잠금 (2026-10-01 손이 닿아 역할이 바뀐 일)
+    var confirmRole by remember { mutableStateOf(false) }
+    val busy = when (role) {
+        Role.SENSOR -> sensor.running
+        Role.RECEIVER -> receiver.phase != StreamPhase.IDLE
+    }
     MaterialTheme {
         Box(
             modifier = Modifier
@@ -233,11 +242,42 @@ private fun WearScreen(
                     Role.RECEIVER -> receiverItems(receiver, peer, onLiveToggle, receiverPrefs, onReceiverPrefs)
                 }
                 item {
-                    CompactChip(
-                        onClick = onRoleToggle,
-                        label = { Text("${role.opposite.label}로 바꾸기") },
-                        colors = ChipDefaults.secondaryChipColors(),
-                    )
+                    if (busy) {
+                        Caption("정지하면 역할을 바꿀 수 있어요")
+                    } else {
+                        CompactChip(
+                            onClick = { confirmRole = true },
+                            label = { Text("${role.opposite.label}로 바꾸기") },
+                            colors = ChipDefaults.secondaryChipColors(),
+                        )
+                    }
+                }
+            }
+            Dialog(showDialog = confirmRole, onDismissRequest = { confirmRole = false }) {
+                Alert(
+                    title = { Text("${role.opposite.label}로 바꿀까요?", textAlign = TextAlign.Center) },
+                    message = {
+                        Text(
+                            if (role.opposite == Role.SENSOR) "폰은 수신기여야 알림을 받아요" else "폰은 감지기여야 소리를 감지해요",
+                            style = MaterialTheme.typography.body2,
+                            textAlign = TextAlign.Center,
+                        )
+                    },
+                ) {
+                    item {
+                        Chip(
+                            onClick = { confirmRole = false; onRoleToggle() },
+                            label = { Text("바꾸기") },
+                            colors = ChipDefaults.primaryChipColors(),
+                        )
+                    }
+                    item {
+                        Chip(
+                            onClick = { confirmRole = false },
+                            label = { Text("취소") },
+                            colors = ChipDefaults.secondaryChipColors(),
+                        )
+                    }
                 }
             }
             // 스크롤하면 시계가 위로 사라진다 (Phase 3.5 에서 목록과 겹치던 문제)
